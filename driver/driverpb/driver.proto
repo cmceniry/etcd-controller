@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package driverpb;
+
+service driver {
+    rpc GetStatus(StatusRequest) returns (StatusResponse) {}
+    rpc InitializeCluster(InitClusterRequest) returns (InitClusterResponse) {}
+}
+
+message StatusRequest {
+}
+
+message StatusResponse {
+    int32 State = 1;
+}
+
+message InitClusterRequest {
+    bool Force = 1;
+    string Snapshot = 2;
+}
+
+message InitClusterResponse {
+    bool Success = 1;
+    string ErrorMessage = 2;
+}
