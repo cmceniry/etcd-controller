@@ -11,15 +11,15 @@ message StatusRequest {
 }
 
 message StatusResponse {
-    int32 State = 1;
+    int32 state = 1;
 }
 
 message InitClusterRequest {
-    bool Force = 1;
-    string Snapshot = 2;
+    bool force = 1;
+    string snapshot = 2;
 }
 
 message InitClusterResponse {
-    bool Success = 1;
-    string ErrorMessage = 2;
+    bool success = 1;
+    string error_message = 2;
 }
