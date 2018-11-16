@@ -142,3 +142,14 @@ func (s *SimpleDriver) JoinCluster(ctx context.Context, req *pb.JoinClusterReque
 	}
 	return r, nil
 }
+
+func (s *SimpleDriver) StopServer(ctx context.Context, req *pb.StopServerRequest) (*pb.StopServerResponse, error) {
+	r := &pb.StopServerResponse{}
+	err := s.Process.StopServer()
+	if err != nil {
+		r.ErrorMessage = err.Error()
+	} else {
+		r.Success = true
+	}
+	return r, nil
+}

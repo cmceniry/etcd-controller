@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"go.etcd.io/etcd/clientv3"
@@ -93,13 +94,18 @@ func (e *ETCDProcess) start(env []string) error {
 	return nil
 }
 
-// Stop stops the ETCD server
-func (e *ETCDProcess) Stop() error {
+// StopServer stops the ETCD server
+func (e *ETCDProcess) StopServer() error {
+	e.mux.Lock()
+	defer e.mux.Unlock()
 	if e.command == nil {
-		return nil
+		return fmt.Errorf("etcd not running")
 	}
-	// TODO: timeout
-	return e.command.Process.Kill()
+	err := e.command.Process.Signal(syscall.SIGTERM)
+	if err != nil {
+		return fmt.Errorf("terminate failed: %s", err)
+	}
+	return nil
 }
 
 // StartInitial starts an empty ETCD server

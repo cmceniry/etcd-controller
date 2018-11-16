@@ -76,6 +76,14 @@ func main() {
 		if !r.Success {
 			fail(-1, "%s join failure: %s\n", node, r.ErrorMessage)
 		}
+	case "stop":
+		r, err := client.StopServer(context.Background(), &pb.StopServerRequest{})
+		if err != nil {
+			fail(-1, "%s GRPC call failure: %s\n", node, err)
+		}
+		if !r.Success {
+			fail(-1, "%s stop failure: %s\n", node, r.ErrorMessage)
+		}
 	default:
 		fail(-1, "Unknown action: %s", action)
 	}
