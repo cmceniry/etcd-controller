@@ -5,6 +5,7 @@ package driverpb;
 service driver {
     rpc GetStatus(StatusRequest) returns (StatusResponse) {}
     rpc InitializeCluster(InitClusterRequest) returns (InitClusterResponse) {}
+    rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse) {}
 }
 
 message StatusRequest {
@@ -20,6 +21,21 @@ message InitClusterRequest {
 }
 
 message InitClusterResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message PeerInfo {
+    string Name = 1;
+    string URL = 2;
+}
+
+message JoinClusterRequest {
+    bool force = 1;
+    repeated PeerInfo peers = 2;
+}
+
+message JoinClusterResponse {
     bool success = 1;
     string error_message = 2;
 }

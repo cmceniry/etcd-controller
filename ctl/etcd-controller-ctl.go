@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cmceniry/etcd-controller/driver"
 	pb "github.com/cmceniry/etcd-controller/driver/driverpb"
@@ -16,8 +17,8 @@ func fail(rc int, message string, args ...interface{}) {
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		fail(-1, "Usage: %s node action\n", os.Args[0])
+	if len(os.Args) < 3 {
+		fail(-1, "Usage: %s node action [args]\n", os.Args[0])
 	}
 	node := os.Args[1]
 	action := os.Args[2]
@@ -49,6 +50,31 @@ func main() {
 		}
 		if r.State != driver.StateRunning {
 			fail(-1, "%s unhealthy", node)
+		}
+	case "join":
+		if len(os.Args) != 4 {
+			fail(-1, "Usage: %s node join peer\n", os.Args[0])
+		}
+		pL := []*pb.PeerInfo{}
+		for _, pS := range strings.Split(os.Args[3], ",") {
+			pI := strings.Split(pS, "=")
+			if len(pI) != 2 {
+				fail(-1, "Invalid format %s", pS)
+			}
+			pL = append(pL, &pb.PeerInfo{
+				Name: pI[0],
+				URL: pI[1],
+			})
+		}
+		jr := &pb.JoinClusterRequest{
+			Peers: pL,
+		}
+		r, err := client.JoinCluster(context.Background(), jr)
+		if err != nil {
+			fail(-1, "%s GRPC call failure: %s\n", node, err)
+		}
+		if !r.Success {
+			fail(-1, "%s join failure: %s\n", node, r.ErrorMessage)
 		}
 	default:
 		fail(-1, "Unknown action: %s", action)

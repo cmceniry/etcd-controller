@@ -110,3 +110,35 @@ func (s *SimpleDriver) InitializeCluster(ctx context.Context, req *pb.InitCluste
 	r.Success = r.ErrorMessage == ""
 	return r, nil
 }
+
+func (s *SimpleDriver) JoinCluster(ctx context.Context, req *pb.JoinClusterRequest) (*pb.JoinClusterResponse, error) {
+	r := &pb.JoinClusterResponse{}
+	if len(req.Peers) == 0 {
+		r.ErrorMessage = "Must specify peer"
+		return r, nil
+	}
+	peerURLs := map[string]string{}
+	for _, p := range req.Peers {
+		if p.Name == "" {
+			r.ErrorMessage = "Missing peer name"
+			return r, nil
+		}
+		if p.URL == "" {
+			r.ErrorMessage = "missing peer URL"
+			return r, nil
+		}
+		peerURLs[p.Name] = p.URL
+	}
+	success, err := s.Process.JoinCluster(peerURLs)
+	if err != nil {
+		r.ErrorMessage = err.Error()
+		return r, nil
+	}
+	if !success {
+		r.ErrorMessage = "Unsuccessful"
+	}
+	if success && r.ErrorMessage == "" {
+		r.Success = true
+	}
+	return r, nil
+}

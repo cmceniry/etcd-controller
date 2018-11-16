@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"go.etcd.io/etcd/clientv3"
@@ -91,6 +92,30 @@ func (e *ETCDProcess) StartInitial() error {
 	return nil
 }
 
+// JoinCluster starts ETCD server with the parameters to join an existing
+// cluster.
+func (e *ETCDProcess) JoinCluster(peerURLs map[string]string) (bool, error) {
+	peers := []string{}
+	for p, u := range peerURLs {
+		peers = append(peers, p + "=" + u)
+	}
+	cmd := exec.Command(e.Config.Binary)
+	cmd.Env = append(
+		e.Config.buildEnvironment(),
+		"ETCD_INITIAL_CLUSTER_STATE=existing",
+		"ETCD_INITIAL_CLUSTER=" + strings.Join(peers, ","),
+	)
+	cmd.Stdin = nil
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	err := cmd.Start()
+	if err != nil {
+		return false, err
+	}
+	e.command = cmd
+	return true, nil
+}
+
 // GetHealth shows the status of this node
 func (e *ETCDProcess) GetHealth() (bool, error) {
 	client, err := clientv3.New(clientv3.Config{
@@ -98,7 +123,7 @@ func (e *ETCDProcess) GetHealth() (bool, error) {
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		panic(err)
+		return false, err
 	}
 	defer client.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

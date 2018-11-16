@@ -8,15 +8,23 @@ import (
 )
 
 func main() {
-	if os.Getenv("ETCDCONTROLLER_IP") == "" {
-		panic("ETCDCONTROLLER_IP must be set")
+	v := map[string]string{
+		"ETCDCONTROLLER_NAME":    "test001",
+		"ETCDCONTROLLER_IP":      "127.0.0.1",
+		"ETCDCONTROLLER_BINARY":  "/usr/local/bin/etcd",
+		"ETCDCONTROLLER_DATADIR": "/var/lib/etcd",
+	}
+	for k := range v {
+		if os.Getenv(k) != "" {
+			v[k] = os.Getenv(k)
+		}
 	}
 	s, err := driver.NewSimpleDriver(
 		driver.SimpleDriverConfig{
-			Binary:      "/usr/local/bin/etcd",
-			Name:        "test01",
-			DataDir:     "/var/lib/etcd",
-			IP:          os.Getenv("ETCDCONTROLLER_IP"),
+			Binary:      v["ETCDCONTROLLER_BINARY"],
+			Name:        v["ETCDCONTROLLER_NAME"],
+			DataDir:     v["ETCDCONTROLLER_DATADIR"],
+			IP:          v["ETCDCONTROLLER_IP"],
 			ClientPort:  2379,
 			PeerPort:    2380,
 			CommandPort: 4270,
