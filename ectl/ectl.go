@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"go.etcd.io/etcd/clientv3"
@@ -62,6 +63,34 @@ func (c ETCDConfig) buildEnvironment() []string {
 type ETCDProcess struct {
 	Config  ETCDConfig
 	command *exec.Cmd
+	mux     sync.Mutex
+}
+
+func (e *ETCDProcess) wait() {
+	e.command.Wait()
+	e.mux.Lock()
+	defer e.mux.Unlock()
+	e.command = nil
+}
+
+func (e *ETCDProcess) start(env []string) error {
+	e.mux.Lock()
+	defer e.mux.Unlock()
+	if e.command != nil {
+		return fmt.Errorf("etcd already running")
+	}
+	cmd := exec.Command(e.Config.Binary)
+	cmd.Env = env
+	cmd.Stdin = nil
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Start()
+	if err != nil {
+		return err
+	}
+	e.command = cmd
+	go e.wait()
+	return nil
 }
 
 // Stop stops the ETCD server
@@ -75,20 +104,14 @@ func (e *ETCDProcess) Stop() error {
 
 // StartInitial starts an empty ETCD server
 func (e *ETCDProcess) StartInitial() error {
-	cmd := exec.Command(e.Config.Binary)
-	cmd.Env = append(
+	startOpts := append(
 		e.Config.buildEnvironment(),
-		// "ETCD_INITIAL_CLUSTER=none",
 		"ETCD_INITIAL_CLUSTER_STATE=new",
 	)
-	cmd.Stdin = nil
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	err := cmd.Start()
+	err := e.start(startOpts)
 	if err != nil {
 		return err
 	}
-	e.command = cmd
 	return nil
 }
 
@@ -99,25 +122,23 @@ func (e *ETCDProcess) JoinCluster(peerURLs map[string]string) (bool, error) {
 	for p, u := range peerURLs {
 		peers = append(peers, p + "=" + u)
 	}
-	cmd := exec.Command(e.Config.Binary)
-	cmd.Env = append(
+	startOpts := append(
 		e.Config.buildEnvironment(),
 		"ETCD_INITIAL_CLUSTER_STATE=existing",
 		"ETCD_INITIAL_CLUSTER=" + strings.Join(peers, ","),
 	)
-	cmd.Stdin = nil
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	err := cmd.Start()
+	err := e.start(startOpts)
 	if err != nil {
 		return false, err
 	}
-	e.command = cmd
 	return true, nil
 }
 
 // GetHealth shows the status of this node
 func (e *ETCDProcess) GetHealth() (bool, error) {
+	if e.command == nil {
+		return false, fmt.Errorf("no etcd server running")
+	}
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"http://localhost:2379"},
 		DialTimeout: 5 * time.Second,
