@@ -1,13 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
+	"strconv"
 
 	"github.com/cmceniry/etcd-controller/driver"
-	pb "github.com/cmceniry/etcd-controller/driver/driverpb"
 	"google.golang.org/grpc"
 )
 
@@ -23,66 +22,47 @@ func main() {
 	node := os.Args[1]
 	action := os.Args[2]
 
+	nodeSplit := strings.Split(node, ":")
+	if len(nodeSplit) != 2 {
+		fail(-1, `Invalid node format "%s": not name:port`, node)
+	}
+	nodePort, err := strconv.Atoi(nodeSplit[1])
+	if err != nil {
+		fail(-1, `Invalid node format "%s": %s`, node, err)
+	}
+
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
-	conn, err := grpc.Dial(node, opts...)
+	s, err := driver.NewSimpleClient(nodeSplit[0], nodePort, opts)
 	if err != nil {
-		fail(-1, "%s GRPC dial failure: %s\n", node, err)
+		fail(-1, "%s Simple client connect failure: %s\n", node, err)
 	}
-	defer conn.Close()
-	client := pb.NewDriverClient(conn)
 
 	switch action {
 	case "init":
-		icr := &pb.InitClusterRequest{}
-		r, err := client.InitializeCluster(context.Background(), icr)
+		err := s.InitCluster()
 		if err != nil {
-			fail(-1, "%s GRPC call failure: %s\n", node, err)
-		}
-		if !r.Success {
-			fail(-1, "%s init failure: %s\n", node, r.ErrorMessage)
+			fail(-1, "%s init failure: %s\n", node, err)
 		}
 	case "status":
-		sr := &pb.StatusRequest{}
-		r, err := client.GetStatus(context.Background(), sr)
+		status, err := s.Status()
 		if err != nil {
-			fail(-1, "%s GRPC call failure: %s\n", node, err)
+			fail(-1, "%s status failure: %s\n", node, err)
 		}
-		if r.State != driver.StateRunning {
-			fail(-1, "%s unhealthy", node)
-		}
+		fmt.Printf("%s Status: %d\n", node, status)
 	case "join":
 		if len(os.Args) != 4 {
 			fail(-1, "Usage: %s node join peer\n", os.Args[0])
 		}
-		pL := []*pb.PeerInfo{}
-		for _, pS := range strings.Split(os.Args[3], ",") {
-			pI := strings.Split(pS, "=")
-			if len(pI) != 2 {
-				fail(-1, "Invalid format %s", pS)
-			}
-			pL = append(pL, &pb.PeerInfo{
-				Name: pI[0],
-				URL: pI[1],
-			})
-		}
-		jr := &pb.JoinClusterRequest{
-			Peers: pL,
-		}
-		r, err := client.JoinCluster(context.Background(), jr)
+		peers := strings.Split(os.Args[3], ",")
+		err := s.JoinCluster(peers)
 		if err != nil {
-			fail(-1, "%s GRPC call failure: %s\n", node, err)
-		}
-		if !r.Success {
-			fail(-1, "%s join failure: %s\n", node, r.ErrorMessage)
+			fail(-1, "%s join failure: %s\n", node, err)
 		}
 	case "stop":
-		r, err := client.StopServer(context.Background(), &pb.StopServerRequest{})
+		err := s.Stop()
 		if err != nil {
-			fail(-1, "%s GRPC call failure: %s\n", node, err)
-		}
-		if !r.Success {
-			fail(-1, "%s stop failure: %s\n", node, r.ErrorMessage)
+			fail(-1, "%s stop failure: %s\n", node, err)
 		}
 	default:
 		fail(-1, "Unknown action: %s", action)
