@@ -92,7 +92,7 @@ func (c *SimpleClient) JoinCluster(peers []string) error {
 		return fmt.Errorf("%s:%d GRPC call failure: %s", c.IP, c.CommandPort, err)
 	}
 	if !r.Success {
-		return fmt.Errorf("%s:%d join failure: %s", c.IP, c.CommandPort, err)
+		return fmt.Errorf("%s:%d join failure: %s", c.IP, c.CommandPort, r.ErrorMessage)
 	}
 	return nil
 }
