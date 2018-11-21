@@ -1,0 +1,19 @@
+---
+- name: etcd-controller-test-005-1
+  IP: 172.18.100.1
+  CommandPort: 4270
+  Insecure: true
+  PeerPort: 2380
+  ClientPort: 2379
+- name: etcd-controller-test-005-2
+  IP: 172.18.100.2
+  CommandPort: 4270
+  Insecure: true
+  PeerPort: 2380
+  ClientPort: 2379
+- name: etcd-controller-test-005-3
+  IP: 172.18.100.3
+  CommandPort: 4270
+  Insecure: true
+  PeerPort: 2380
+  ClientPort: 2379
