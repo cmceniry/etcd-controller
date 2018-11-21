@@ -52,10 +52,10 @@ func (c *SimpleClient) Status() (int32, error) {
 func (c *SimpleClient) Stop() error {
 	r, err := c.client.StopServer(context.Background(), &pb.StopServerRequest{})
 	if err != nil {
-		fmt.Errorf("%s:%d GRPC call failure: %s", c.IP, c.CommandPort, err)
+		return fmt.Errorf("%s:%d GRPC call failure: %s", c.IP, c.CommandPort, err)
 	}
 	if !r.Success {
-		fmt.Errorf("%s:%d stop failure: %s", c.IP, c.CommandPort, r.ErrorMessage)
+		return fmt.Errorf("%s:%d stop failure: %s", c.IP, c.CommandPort, r.ErrorMessage)
 	}
 	return nil
 }
