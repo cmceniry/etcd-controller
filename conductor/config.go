@@ -1,11 +1,16 @@
 package conductor
 
 import (
-	"fmt"
+	"io/ioutil"
+	"os"
 
 	"google.golang.org/grpc"
 	yaml "gopkg.in/yaml.v2"
 )
+
+type Config struct {
+	NodeListFilename string
+}
 
 type NodeInfoConfig struct {
 	Name        string
@@ -18,13 +23,35 @@ type NodeInfoConfig struct {
 
 type NodeListConfig []NodeInfoConfig
 
-func (c *Conductor) LoadYaml(d []byte) error {
+func (c *Conductor) checkNodeList() (bool, error) {
+	fi, err := os.Stat(c.Config.NodeListFilename)
+	if err != nil {
+		return false, err
+	}
+	if !c.lastNodeListRead.Before(fi.ModTime()) {
+		return false, nil
+	}
+	d, err := ioutil.ReadFile("/config/node-list.yaml")
+	if err != nil {
+		return false, err
+	}
+	err = c.loadYaml(d)
+	if err != nil {
+		return false, err
+	}
+	c.lastNodeListRead = fi.ModTime()
+	return true, nil
+}
+
+func (c *Conductor) loadYaml(d []byte) error {
 	var data []NodeInfoConfig
 	err := yaml.Unmarshal(d, &data)
 	if err != nil {
 		return err
 	}
+	seen := map[string]struct{}{}
 	for _, n := range data {
+		seen[n.Name] = struct{}{}
 		ni := &NodeInfo{
 			Name:        n.Name,
 			IP:          n.IP,
@@ -35,8 +62,12 @@ func (c *Conductor) LoadYaml(d []byte) error {
 		if n.Insecure {
 			ni.CommandOpts = []grpc.DialOption{grpc.WithInsecure()}
 		}
-		fmt.Printf("%#v\n", ni)
 		c.NodeList[n.Name] = ni
+	}
+	for newNodeName := range c.NodeList {
+		if _, ok := seen[newNodeName]; !ok {
+			delete(c.NodeList, newNodeName)
+		}
 	}
 	return err
 }

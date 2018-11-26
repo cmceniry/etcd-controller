@@ -19,8 +19,10 @@ import (
 // The Conductor's goal is to ensure that all nodes on the "official" node
 // list are active members in the cluster.
 type Conductor struct {
-	NodeList     map[string]*NodeInfo
-	CurrentNodes map[string]*NodeInfo
+	Config           *Config
+	NodeList         map[string]*NodeInfo
+	CurrentNodes     map[string]*NodeInfo
+	lastNodeListRead time.Time
 }
 
 type NodeInfo struct {
@@ -45,8 +47,9 @@ func (n NodeInfo) PeerString() string {
 }
 
 // NewConductor is the general Conductor constructor.
-func NewConductor() *Conductor {
+func NewConductor(c Config) *Conductor {
 	return &Conductor{
+		Config:       &c,
 		NodeList:     make(map[string]*NodeInfo),
 		CurrentNodes: make(map[string]*NodeInfo),
 	}
@@ -251,6 +254,21 @@ func (c *Conductor) Run() {
 		}
 		time.Sleep(throttle)
 		lastRun = time.Now()
+		changed, err := c.checkNodeList()
+		if err != nil {
+			fmt.Printf(`Error getting node list "%s": %s`+"\n", c.Config.NodeListFilename, err)
+			continue
+		}
+		if changed {
+			fmt.Printf("New node list:\n%#v\n", c.NodeList)
+			if len(c.NodeList) > 0 {
+				for _, ni := range c.NodeList {
+					fmt.Printf("- %#v\n", ni)
+				}
+			} else {
+				fmt.Printf("- empty\n")
+			}
+		}
 		// TODO: Check all current nodes health
 		// TODO: Check if etcd cluster has nodes not in current node list
 		// TODO: Check if there are extra nodes and remove them first
