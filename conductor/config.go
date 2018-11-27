@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	NodeListFilename string
+	CommandPort      int
 }
 
 type NodeInfoConfig struct {

@@ -14,7 +14,12 @@ docker kill \
     etcd-controller-test-005-0 \
     etcd-controller-test-005-1 \
     etcd-controller-test-005-2 \
-    etcd-controller-test-005-3
+    etcd-controller-test-005-3 \
+    etcd-controller-test-006-0 \
+    etcd-controller-test-006-1 \
+    etcd-controller-test-006-2 \
+    etcd-controller-test-006-3 \
+    etcd-controller-test-006-10
     
 docker rm \
     etcd-controller-test-001-0 \
@@ -30,4 +35,9 @@ docker rm \
     etcd-controller-test-005-0 \
     etcd-controller-test-005-1 \
     etcd-controller-test-005-2 \
-    etcd-controller-test-005-3
+    etcd-controller-test-005-3 \
+    etcd-controller-test-006-0 \
+    etcd-controller-test-006-1 \
+    etcd-controller-test-006-2 \
+    etcd-controller-test-006-3 \
+    etcd-controller-test-006-10

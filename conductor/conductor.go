@@ -3,6 +3,7 @@ package conductor
 import (
 	"context"
 	"fmt"
+	"net"
 	"reflect"
 	"time"
 
@@ -23,6 +24,9 @@ type Conductor struct {
 	NodeList         map[string]*NodeInfo
 	CurrentNodes     map[string]*NodeInfo
 	lastNodeListRead time.Time
+
+	Listener net.Listener
+	GRPCServer *grpc.Server
 }
 
 type NodeInfo struct {
@@ -32,6 +36,7 @@ type NodeInfo struct {
 	CommandOpts []grpc.DialOption
 	PeerPort    int
 	ClientPort  int
+	Status      int32
 }
 
 func (n NodeInfo) ClientURL() string {
@@ -246,6 +251,8 @@ func (c *Conductor) pickRandomMissingNodeFromList() string {
 }
 
 func (c *Conductor) Run() {
+	c.runGRPCListener()
+
 	lastRun := time.Now().Add(-1 * time.Second)
 	for {
 		throttle := lastRun.Add(1 * time.Second).Sub(lastRun)
