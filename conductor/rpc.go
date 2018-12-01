@@ -11,10 +11,12 @@ import (
 
 //go:generate protoc -I conductorpb --go_out=plugins=grpc:conductorpb conductor.proto
 
+// GetStatus returns the condition of the entire cluster
 func (c *Conductor) GetStatus(ctx context.Context, req *pb.GetStatusRequest) (*pb.GetStatusResponse, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
+// GetNodeStatus returns the condition of a specific node
 func (c *Conductor) GetNodeStatus(ctx context.Context, req *pb.GetNodeStatusRequest) (*pb.GetNodeStatusResponse, error) {
 	ni, ok := c.CurrentNodes[req.Name]
 	if !ok {

@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc"
 )
 
+// Client is the library abstraction for the Conductor GRPC client
 type Client struct {
 	IP          string
 	CommandPort int
@@ -16,6 +17,7 @@ type Client struct {
 	client      pb.ConductorClient
 }
 
+// NewClient returns a Conductor GRPC Client
 func NewClient(ip string, cp int, opts []grpc.DialOption) (*Client, error) {
 	c := &Client{
 		IP:          ip,
@@ -34,19 +36,23 @@ func NewClient(ip string, cp int, opts []grpc.DialOption) (*Client, error) {
 	return c, nil
 }
 
+// NodeStatus wraps the GRPC node status response
 type NodeStatus struct {
 	Name   string
 	Status string
 }
 
+// ClusterStatus collect the NodeStatus of all nodes in the cluster
 type ClusterStatus struct {
 	Nodes []NodeStatus
 }
 
+// Status wraps GRPC GetStatus for the cluster
 func (c *Client) Status() (ClusterStatus, error) {
 	return ClusterStatus{}, fmt.Errorf("not implemented")
 }
 
+// NodeStatus wraps the GRPC GetNodeStatus call
 func (c *Client) NodeStatus(nodeName string) (NodeStatus, error) {
 	sr := &pb.GetNodeStatusRequest{Name: nodeName}
 	r, err := c.client.GetNodeStatus(context.Background(), sr)

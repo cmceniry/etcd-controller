@@ -8,11 +8,14 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+// Config is the simple configuration pieces for Conductor
 type Config struct {
 	NodeListFilename string
 	CommandPort      int
 }
 
+// NodeInfoConfig is the data stored in a node list file which can be used to
+// populate the authoritative list of what should be in the cluster
 type NodeInfoConfig struct {
 	Name        string
 	IP          string `yaml:"IP"`
@@ -22,6 +25,7 @@ type NodeInfoConfig struct {
 	ClientPort  int    `yaml:"ClientPort"`
 }
 
+// NodeListConfig is an array of node configuration
 type NodeListConfig []NodeInfoConfig
 
 func (c *Conductor) checkNodeList() (bool, error) {

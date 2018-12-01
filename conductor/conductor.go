@@ -29,6 +29,8 @@ type Conductor struct {
 	GRPCServer *grpc.Server
 }
 
+// NodeInfo holds simple information about the nodes that this Conductor is
+// watching.
 type NodeInfo struct {
 	Name        string
 	IP          string
@@ -39,14 +41,17 @@ type NodeInfo struct {
 	Status      int32
 }
 
+// ClientURL returns the URL for etcd clients to connect to on this node
 func (n NodeInfo) ClientURL() string {
 	return fmt.Sprintf("http://%s:%d", n.IP, n.ClientPort)
 }
 
+// PeerURL returns the URL for etcd peer to connect to on this node
 func (n NodeInfo) PeerURL() string {
 	return fmt.Sprintf("http://%s:%d", n.IP, n.PeerPort)
 }
 
+// PeerString returns the value to use in the cluster node list
 func (n NodeInfo) PeerString() string {
 	return fmt.Sprintf("%s=http://%s:%d", n.Name, n.IP, n.PeerPort)
 }
@@ -250,6 +255,7 @@ func (c *Conductor) pickRandomMissingNodeFromList() string {
 	return ""
 }
 
+// Run starts the main Conductor work loop
 func (c *Conductor) Run() {
 	c.runGRPCListener()
 
@@ -303,20 +309,4 @@ func (c *Conductor) Run() {
 		fmt.Printf("Nothing to do\n")
 		time.Sleep(1 * time.Second)
 	}
-
-	// err := c.initNewCluster("etcd-controller-test-005-1")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Printf("init successful\n")
-	// err = c.addNodeToCluster("etcd-controller-test-005-2")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Printf("2 join successful\n")
-	// err = c.addNodeToCluster("etcd-controller-test-005-3")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Printf("3 join successful\n")
 }
