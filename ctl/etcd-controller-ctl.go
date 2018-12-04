@@ -96,7 +96,7 @@ func main() {
 			fail(-1, "%s stop failure: %s\n", node, err)
 		}
 	default:
-		fail(-1, "Unknown action: %s", action)
+		fail(-1, "Unknown action: %s\n", action)
 	}
 
 	os.Exit(0)
