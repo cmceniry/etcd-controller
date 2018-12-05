@@ -71,7 +71,9 @@ func main() {
 		if err != nil {
 			fail(-1, "%s status failure: %s\n", node, err)
 		}
-		fmt.Printf("%s Status: %#v\n", node, status)
+		for _, n := range status.Nodes {
+			fmt.Printf("%s %s\n", n.Name, n.Status)
+		}
 	case "nodestatus":
 		if len(os.Args) != 4 {
 			fail(-1, "Usage: %s node nodestatus nodeForStatus\n", os.Args[0])

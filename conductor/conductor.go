@@ -283,6 +283,10 @@ func (c *Conductor) Run() {
 			}
 		}
 		// TODO: Check all current nodes health
+		err = c.getClusterNodeStatus()
+		if err != nil {
+			fmt.Printf(`Error getting cluster node status: %s`+"\n", err)
+		}
 		// TODO: Check if etcd cluster has nodes not in current node list
 		// TODO: Check if there are extra nodes and remove them first
 		// If empty cluster, init it

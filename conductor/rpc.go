@@ -13,7 +13,16 @@ import (
 
 // GetStatus returns the condition of the entire cluster
 func (c *Conductor) GetStatus(ctx context.Context, req *pb.GetStatusRequest) (*pb.GetStatusResponse, error) {
-	return nil, fmt.Errorf("not implemented")
+	resp := &pb.GetStatusResponse{
+		Nodes: []*pb.NodeInfo{},
+	}
+	for _, ni := range c.CurrentNodes {
+		resp.Nodes = append(resp.Nodes, &pb.NodeInfo{
+			Name:   ni.Name,
+			Status: pb.NodeInfoStatus(ni.Status),
+		})
+	}
+	return resp, nil
 }
 
 // GetNodeStatus returns the condition of a specific node

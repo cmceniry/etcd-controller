@@ -20,7 +20,7 @@ function ctl_command() {
 }
 
 
-docker-compose up -d
+docker-compose up -d || exit -1
 sleep 5
 
 ctl_command /etcd-controller-ctl ${TESTNET}.101:4270 init

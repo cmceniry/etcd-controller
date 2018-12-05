@@ -49,7 +49,21 @@ type ClusterStatus struct {
 
 // Status wraps GRPC GetStatus for the cluster
 func (c *Client) Status() (ClusterStatus, error) {
-	return ClusterStatus{}, fmt.Errorf("not implemented")
+	sr := &pb.GetStatusRequest{}
+	r, err := c.client.GetStatus(context.Background(), sr)
+	if err != nil {
+		return ClusterStatus{}, fmt.Errorf("%s:%d GRPC call failure: %s", c.IP, c.CommandPort, err)
+	}
+	cs := ClusterStatus{
+		Nodes: []NodeStatus{},
+	}
+	for _, n := range r.Nodes {
+		cs.Nodes = append(cs.Nodes, NodeStatus{
+			Name:   n.Name,
+			Status: n.Status.String(),
+		})
+	}
+	return cs, nil
 }
 
 // NodeStatus wraps the GRPC GetNodeStatus call
