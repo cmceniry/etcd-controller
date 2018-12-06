@@ -259,14 +259,8 @@ func (c *Conductor) pickRandomMissingNodeFromList() string {
 func (c *Conductor) Run() {
 	c.runGRPCListener()
 
-	lastRun := time.Now().Add(-1 * time.Second)
-	for {
-		throttle := lastRun.Add(1 * time.Second).Sub(lastRun)
-		if throttle > time.Second {
-			throttle = time.Second
-		}
-		time.Sleep(throttle)
-		lastRun = time.Now()
+	for t := range time.NewTicker(1 * time.Second).C {
+		fmt.Printf("%s TICK!\n", t)
 		changed, err := c.checkNodeList()
 		if err != nil {
 			fmt.Printf(`Error getting node list "%s": %s`+"\n", c.Config.NodeListFilename, err)
