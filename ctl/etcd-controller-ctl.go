@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"strconv"
 
@@ -71,7 +72,15 @@ func main() {
 		if err != nil {
 			fail(-1, "%s status failure: %s\n", node, err)
 		}
+		sortNames := []string{}
+		nodeStatuses := map[string]conductor.NodeStatus{}
 		for _, n := range status.Nodes {
+			sortNames = append(sortNames, n.Name)
+			nodeStatuses[n.Name] = n
+		}
+		sort.Strings(sortNames)
+		for _, nodeName := range sortNames {
+			n := nodeStatuses[nodeName]
 			fmt.Printf("%s %s\n", n.Name, n.Status)
 		}
 	case "nodestatus":
