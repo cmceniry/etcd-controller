@@ -16,9 +16,7 @@ function ctl_command() {
     docker-compose exec ctl \
         "$@"
     rc=$?
-    if [ $rc -eq 0 ]; then
-        echo "SUCCESS"
-    else
+    if [ $rc -ne 0 ]; then
         echo "FAIL: rc=$rc"
         exit -1
     fi
@@ -52,18 +50,22 @@ EONS
 generate_config #none
 
 docker-compose up -d
-sleep 10
+sleep 5
 
-echo "---------- UPDATING NODE LIST TO INIT/START A NEW CLUSTER ----------"
+echo "---------- ENSURING NO NODES IN CSTATUS ----------"
 
-cs=$(ctl_command_result /etcd-controller-ctl ${TESTNET}.100:4270 cstatus | awk '$2 == "RUNNING"' | wc -l)
+cs=$(ctl_command_result /etcd-controller-ctl ${TESTNET}.100:4270 cstatus | wc -l)
 rc=$?
 if [ $rc -ne 0 ]; then fail -1 "FAIL: clusterstatus rc=$rc"; fi
 if [ -z $cs ]; then fail -1 "FAIL: clusterstatus is empty"; fi
 if [ $cs -ne 0 ]; then fail -1 "FAIL: clusterstatus not 0. got $cs"; fi
 
+echo "SUCCESS"
+
+echo "---------- UPDATING NODE LIST TO INIT/START A NEW CLUSTER ----------"
+
 generate_config 101 102 103
-sleep 30
+sleep 20
 
 n1=$(ctl_command_result /etcd-controller-ctl ${TESTNET}.100:4270 nodestatus ${TESTNAME}-101)
 rc=$?
@@ -88,19 +90,34 @@ if [ $rc -ne 0 ]; then fail -1 "FAIL: clusterstatus rc=$rc"; fi
 if [ -z $cs ]; then fail -1 "FAIL: clusterstatus cs is empty"; fi
 if [ $cs -ne 3 ]; then fail -1 "FAIL: clusterstatus not 3. got $cs"; fi
 
+ctl_command /usr/local/bin/etcdctl --endpoints http://${TESTNET}.101:2379,http://${TESTNET}.102:2379,http://${TESTNET}.103:2379 endpoint status
+
+echo SUCCESS
 
 echo "---------- STOPPING A NODE AND DETECTING IT AS DOWN ----------"
-ctl_command /etcd-controller-ctl ${TESTNET}.102:4270 stop
-sleep 5
 
-es=$(ctl_command_result /usr/local/bin/etcdctl --endpoints http://${TESTNET}.101:2379,http://${TESTNET}.102:2379,http://${TESTNET}.103:2379 endpoint status)
-rc=$?
-if [ $rc -eq 0 ]; then fail -1 "FAIL: etcdctl succeeded with supposed to be stopped node: rc=$rc: $es"; fi
+ctl_command /etcd-controller-ctl ${TESTNET}.102:4270 stop
 
 cs=$(ctl_command_result /etcd-controller-ctl ${TESTNET}.100:4270 cstatus | awk '$2 == "RUNNING"' | wc -l)
 rc=$?
 if [ $rc -ne 0 ]; then fail -1 "FAIL: clusterstatus rc=$rc"; fi
 if [ -z $cs ]; then fail -1 "FAIL: clusterstatus cs is empty"; fi
 if [ $cs -ne 2 ]; then fail -1 "FAIL: clusterstatus not 2. got $cs"; fi
+
+echo SUCCESS
+
+sleep 5
+
+echo "---------- ENSURING THAT IT IS ALREADY RESTARTED BY CONDUCTOR ---------"
+
+cs=$(ctl_command_result /etcd-controller-ctl ${TESTNET}.100:4270 cstatus | awk '$2 == "RUNNING"' | wc -l)
+rc=$?
+if [ $rc -ne 0 ]; then fail -1 "FAIL: clusterstatus rc=$rc"; fi
+if [ -z $cs ]; then fail -1 "FAIL: clusterstatus cs is empty"; fi
+if [ $cs -ne 3 ]; then fail -1 "FAIL: clusterstatus not 3. got $cs"; fi
+
+ctl_command /usr/local/bin/etcdctl --endpoints http://${TESTNET}.101:2379,http://${TESTNET}.102:2379,http://${TESTNET}.103:2379 endpoint status
+
+echo SUCCESS
 
 docker-compose down

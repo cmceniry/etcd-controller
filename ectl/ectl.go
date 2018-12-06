@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -94,6 +95,12 @@ func (e *ETCDProcess) start(env []string) error {
 	return nil
 }
 
+// StartServer starts the ETCD server normally (i.e. without any join/
+// init/etc options)
+func (e *ETCDProcess) StartServer() error {
+	return e.start(e.Config.buildEnvironment())
+}
+
 // StopServer stops the ETCD server
 func (e *ETCDProcess) StopServer() error {
 	e.mux.Lock()
@@ -142,7 +149,7 @@ func (e *ETCDProcess) JoinCluster(peerURLs map[string]string) (bool, error) {
 
 // IsInitialized returns if it is ready to run
 func (e *ETCDProcess) IsInitialized() bool {
-	s, err := os.Lstat(e.Config.DataDir)
+	s, err := os.Lstat(filepath.Join(e.Config.DataDir, "member"))
 	if err != nil {
 		return false
 	}

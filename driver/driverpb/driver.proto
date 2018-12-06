@@ -7,6 +7,7 @@ service driver {
     rpc InitializeCluster(InitClusterRequest) returns (InitClusterResponse) {}
     rpc JoinCluster(JoinClusterRequest) returns (JoinClusterResponse) {}
     rpc StopServer(StopServerRequest) returns (StopServerResponse) {}
+    rpc StartServer(StartServerRequest) returns (StartServerResponse) {}
 }
 
 message StatusRequest {
@@ -44,6 +45,13 @@ message JoinClusterResponse {
 message StopServerRequest {}
 
 message StopServerResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message StartServerRequest {}
+
+message StartServerResponse {
     bool success = 1;
     string error_message = 2;
 }

@@ -101,6 +101,11 @@ func main() {
 		if err != nil {
 			fail(-1, "%s join failure: %s\n", node, err)
 		}
+	case "start":
+		err := mustSimpleClient(nodeIP, nodePort, opts).Start()
+		if err != nil {
+			fail(-1, "%s start failure: %s\n", node, err)
+		}
 	case "stop":
 		err := mustSimpleClient(nodeIP, nodePort, opts).Stop()
 		if err != nil {

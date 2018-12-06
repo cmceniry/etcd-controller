@@ -49,6 +49,18 @@ func (c *SimpleClient) Status() (int32, error) {
 	// return 1, nil
 }
 
+// Start attempts to have a node do a normal (no cluster member changes) start up
+func (c *SimpleClient) Start() error {
+	r, err := c.client.StartServer(context.Background(), &pb.StartServerRequest{})
+	if err != nil {
+		return fmt.Errorf("%s:%d GRPC call failure: %s", c.IP, c.CommandPort, err)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s:%d start failure: %s", c.IP, c.CommandPort, r.ErrorMessage)
+	}
+	return nil
+}
+
 func (c *SimpleClient) Stop() error {
 	r, err := c.client.StopServer(context.Background(), &pb.StopServerRequest{})
 	if err != nil {

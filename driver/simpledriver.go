@@ -15,7 +15,7 @@ type SimpleDriver struct {
 	Process    *ectl.ETCDProcess
 	Listener   net.Listener
 	GRPCServer *grpc.Server
-	inProgress bool
+	failed     bool
 }
 
 type SimpleDriverConfig struct {
@@ -147,6 +147,19 @@ func (s *SimpleDriver) JoinCluster(ctx context.Context, req *pb.JoinClusterReque
 		r.ErrorMessage = "Unsuccessful"
 	}
 	if success && r.ErrorMessage == "" {
+		r.Success = true
+	}
+	return r, nil
+}
+
+// StartServer is the RPC call receiver which will start an ETCD server under
+// normal startup circumstances (i.e. no join/init/etc).
+func (s *SimpleDriver) StartServer(ctx context.Context, req *pb.StartServerRequest) (*pb.StartServerResponse, error) {
+	r := &pb.StartServerResponse{}
+	err := s.Process.StartServer()
+	if err != nil {
+		r.ErrorMessage = err.Error()
+	} else {
 		r.Success = true
 	}
 	return r, nil

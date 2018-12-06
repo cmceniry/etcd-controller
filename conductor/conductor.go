@@ -157,6 +157,19 @@ func (c *Conductor) initNewCluster(initNodeName string) error {
 	return nil
 }
 
+func (c *Conductor) startNode(nodeName string) error {
+	node, ok := c.CurrentNodes[nodeName]
+	if !ok {
+		return fmt.Errorf("Unknown node: %s", nodeName)
+	}
+	dc, err := c.connectCommand(node)
+	if err != nil {
+		return fmt.Errorf("failed to connect: %s", err)
+	}
+	err = dc.Start()
+	return err
+}
+
 func (c *Conductor) etcdctlMemberList(ni *NodeInfo) (map[string]uint64, error) {
 	client, err := c.etcdDial(ni)
 	if err != nil {
@@ -280,6 +293,16 @@ func (c *Conductor) Run() {
 		err = c.getClusterNodeStatus()
 		if err != nil {
 			fmt.Printf(`Error getting cluster node status: %s`+"\n", err)
+		}
+		// Check if any current nodes have failed and should attempt a restart
+		for nodeName, nodeInfo := range c.CurrentNodes {
+			if !nodeInfo.IsRunning() {
+				fmt.Printf("Starting stopped node: %s\n", nodeName)
+				err := c.startNode(nodeName)
+				if err != nil {
+					fmt.Printf("Error trying to ensure node is running: %s: %s\n", nodeName, err)
+				}
+			}
 		}
 		// TODO: Check if etcd cluster has nodes not in current node list
 		// TODO: Check if there are extra nodes and remove them first
