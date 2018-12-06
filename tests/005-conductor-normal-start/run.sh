@@ -1,35 +1,20 @@
-#!/bin/sh -x
-
-cd `dirname $0`
+#!/bin/bash
 
 TESTNAME=etcd-controller-test-005
-TESTNET=172.27.0
+cd `dirname $0`
+. ../common.sh
 
-export TESTNAME TESTNET
+mkdir -p ./config
+generate_config 101 102 103
 
-function ctl_command() {
-    docker-compose exec ctl \
-        "$@"
-    rc=$?
-    if [ $rc -eq 0 ]; then
-        echo "SUCCESS"
-    else
-        echo "FAIL: rc=$rc"
-        exit -1
-    fi
-}
+docker-compose up -d || exit -1
 
-function ctl_command_result() {
-    docker-compose exec -T ctl "$@"
-}
+echo "---------- LONG WAIT FOR EVERYTHING TO COME UP ----------"
 
-function fail() {
-    echo $2
-    exit $1
-}
-
-docker-compose up -d
 sleep 30
+
+echo SUCCESS
+echo "---------- CHECK NODE ALL THREE NODE STATUSES ----------"
 
 n1=$(ctl_command_result /etcd-controller-ctl ${TESTNET}.100:4270 nodestatus ${TESTNAME}-101)
 rc=$?
@@ -46,12 +31,18 @@ rc=$?
 if [ $? -ne 0 ]; then fail -1 "FAIL: nodestatus103. Expected 0. Got $rc: $n1"; fi
 if [ "$n3" != "RUNNING" ]; then fail -1 "FAIL: nodestatus103. Not RUNNING: $n3"; fi
 
-ctl_command /etcd-controller-ctl ${TESTNET}.100:4270 cstatus
+echo SUCCESS
+echo "---------- CHECK NODE ALL THREE NODE STATUSES ----------"
 
+ctl_command /etcd-controller-ctl ${TESTNET}.100:4270 cstatus
 cs=$(ctl_command_result /etcd-controller-ctl ${TESTNET}.100:4270 cstatus | awk '$2 == "RUNNING"' | wc -l)
 rc=$?
 if [ $rc -ne 0 ]; then fail -1 "FAIL: clusterstatus rc=$rc"; fi
 if [ -z $cs ]; then fail -1 "FAIL: clusterstatus cs is empty"; fi
 if [ $cs -ne 3 ]; then fail -1 "FAIL: clusterstatus not 3. got $cs"; fi
 
+echo SUCCESS
+echo "---------- CLEANUP ----------"
+
 docker-compose down
+rm -rf ./config

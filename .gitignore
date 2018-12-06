@@ -1,3 +1,4 @@
 /etcd-controller
 /etcd-controller-ctl
-/tests/006-modify-in-flight/config
+/tests/**/config
+/tests/results-*

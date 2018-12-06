@@ -1,44 +1,33 @@
-#!/bin/sh -x
-
-cd `dirname $0`
+#!/bin/bash
 
 TESTNAME=etcd-controller-test-004
-TESTNET=172.27.0
+cd `dirname $0`
+. ../common.sh
 
-export TESTNAME TESTNET
-
-function ctl_command() {
-    docker-compose exec ctl \
-        "$@"
-    rc=$?
-    if [ $rc -eq 0 ]; then
-        echo "SUCCESS"
-    else
-        echo "FAIL: rc=$rc"
-        exit -1
-    fi
-}
-
-
-docker-compose up -d
+docker-compose up -d || exit -1
 sleep 5
+
+echo "---------- INITIALIZE SINGLE NODE ----------"
 
 ctl_command /etcd-controller-ctl ${TESTNET}.101:4270 init
 sleep 5
-
 ctl_command /etcd-controller-ctl ${TESTNET}.101:4270 status
-sleep 5
+
+echo SUCCESS
+echo "---------- STOP NODE ----------"
 
 ctl_command /etcd-controller-ctl ${TESTNET}.101:4270 stop
 sleep 5
+ctl_command /etcd-controller-ctl ${TESTNET}.101:4270 status
 
-docker-compose exec ctl /etcd-controller-ctl ${TESTNET}.101:4270 stop
+echo SUCCESS
+echo "---------- ATTEMPT SECOND STOP - CHECK THAT IT FAILS ----------"
+
+ctl_command_result ctl /etcd-controller-ctl ${TESTNET}.101:4270 stop
 rc=$?
-if [ $rc -eq 0 ]; then
-    echo "EXPECTED FAILURE, GOT: $rc"
-    exit -1
-else
-    echo "SUCCESS"
-fi
+if [ $rc -eq 0 ]; then fail -1 "expected failure. got $rc"; fi
+
+echo SUCCESS
+echo "---------- CLEANUP ----------"
 
 docker-compose down

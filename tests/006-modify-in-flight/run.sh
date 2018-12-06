@@ -1,55 +1,14 @@
 #!/bin/bash
 
-if [ "$1" == "-v" ]; then
-    set -x
-fi
-
-cd `dirname $0`
-mkdir -p config
-
 TESTNAME=etcd-controller-test-006
-TESTNET=172.27.0
+cd `dirname $0`
+. ../common.sh
 
-export TESTNAME TESTNET
-
-function ctl_command() {
-    docker-compose exec ctl \
-        "$@"
-    rc=$?
-    if [ $rc -ne 0 ]; then
-        echo "FAIL: rc=$rc"
-        exit -1
-    fi
-}
-
-function ctl_command_result() {
-    docker-compose exec -T ctl "$@"
-}
-
-function fail() {
-    echo $2
-    exit $1
-}
-
-function generate_config() {
-    tmp=$(mktemp config/node-list.yaml.XXXXXX)
-    echo "---" >>${tmp}
-    for nodenumber in $@; do
-        cat >>${tmp} <<EONS
-- name: ${TESTNAME}-${nodenumber}
-  IP: ${TESTNET}.${nodenumber}
-  CommandPort: 4270
-  Insecure: true
-  PeerPort: 2380
-  ClientPort: 2379
-EONS
-    done
-    mv ${tmp} config/node-list.yaml
-}
+mkdir -p ./config
 
 generate_config #none
 
-docker-compose up -d
+docker-compose up -d || exit -1
 sleep 5
 
 echo "---------- ENSURING NO NODES IN CSTATUS ----------"
@@ -61,7 +20,6 @@ if [ -z $cs ]; then fail -1 "FAIL: clusterstatus is empty"; fi
 if [ $cs -ne 0 ]; then fail -1 "FAIL: clusterstatus not 0. got $cs"; fi
 
 echo "SUCCESS"
-
 echo "---------- UPDATING NODE LIST TO INIT/START A NEW CLUSTER ----------"
 
 generate_config 101 102 103
@@ -93,7 +51,6 @@ if [ $cs -ne 3 ]; then fail -1 "FAIL: clusterstatus not 3. got $cs"; fi
 ctl_command /usr/local/bin/etcdctl --endpoints http://${TESTNET}.101:2379,http://${TESTNET}.102:2379,http://${TESTNET}.103:2379 endpoint status
 
 echo SUCCESS
-
 echo "---------- STOPPING A NODE AND DETECTING IT AS DOWN ----------"
 
 ctl_command /etcd-controller-ctl ${TESTNET}.102:4270 stop
@@ -105,9 +62,7 @@ if [ -z $cs ]; then fail -1 "FAIL: clusterstatus cs is empty"; fi
 if [ $cs -ne 2 ]; then fail -1 "FAIL: clusterstatus not 2. got $cs"; fi
 
 echo SUCCESS
-
 sleep 5
-
 echo "---------- ENSURING THAT IT IS ALREADY RESTARTED BY CONDUCTOR ---------"
 
 cs=$(ctl_command_result /etcd-controller-ctl ${TESTNET}.100:4270 cstatus | awk '$2 == "RUNNING"' | wc -l)
@@ -119,5 +74,7 @@ if [ $cs -ne 3 ]; then fail -1 "FAIL: clusterstatus not 3. got $cs"; fi
 ctl_command /usr/local/bin/etcdctl --endpoints http://${TESTNET}.101:2379,http://${TESTNET}.102:2379,http://${TESTNET}.103:2379 endpoint status
 
 echo SUCCESS
+echo "---------- CLEANUP ----------"
 
 docker-compose down
+rm -rf ./config

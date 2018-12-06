@@ -7,3 +7,5 @@ for d in `find . -type d -maxdepth 1 -not -path .`; do
     docker-compose down
     popd
 done
+
+rm -f results-*.out

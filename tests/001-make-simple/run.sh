@@ -1,36 +1,27 @@
-#!/bin/sh -x
-
-cd `dirname $0`
+#!/bin/bash
 
 TESTNAME=etcd-controller-test-001
-TESTNET=172.27.0
-
-export TESTNAME TESTNET
-
-function ctl_command() {
-    docker-compose exec ctl \
-        "$@"
-    rc=$?
-    if [ $rc -eq 0 ]; then
-        echo "SUCCESS"
-    else
-        echo "FAIL: rc=$rc"
-        exit -1
-    fi
-}
-
+cd `dirname $0`
+. ../common.sh
 
 docker-compose up -d || exit -1
 sleep 5
 
+echo "---------- INITIALIZE SINGLE NODE ----------"
+
 ctl_command /etcd-controller-ctl ${TESTNET}.101:4270 init
+
+echo SUCCESS
 sleep 5
+echo "---------- CHECK STATUS ----------"
 
 ctl_command /etcd-controller-ctl ${TESTNET}.101:4270 status
-sleep 5
 
 ctl_command /usr/local/bin/etcdctl \
   --endpoints http://${TESTNET}.101:2379 \
   endpoint status
+
+echo SUCCESS
+echo "---------- CLEANUP ----------"
 
 docker-compose down
