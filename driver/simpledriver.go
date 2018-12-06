@@ -90,9 +90,18 @@ func (s *SimpleDriver) Run() error {
 
 func (s *SimpleDriver) GetStatus(ctx context.Context, req *pb.StatusRequest) (*pb.StatusResponse, error) {
 	r := &pb.StatusResponse{}
+	if s.Process == nil || !s.Process.IsInitialized() {
+		r.State = StateUnknown
+		return r, nil
+	}
+	if !s.Process.IsRunning() {
+		r.State = StateStopped
+		return r, nil
+	}
 	h, err := s.Process.GetHealth()
 	if err != nil || !h {
 		r.State = StateUnknown
+		return r, nil
 	}
 	r.State = StateRunning
 	return r, nil

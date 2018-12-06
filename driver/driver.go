@@ -15,9 +15,12 @@ const (
 	// StateUnknown is the starting point
 	StateUnknown = iota
 
-	// StateStarting means trying to run
-	StateStarting
-
 	// StateRunning means running
 	StateRunning
+
+	// StateStopped means ready but not running
+	StateStopped
+
+	// StateFailed means not ready (and not running)
+	StateFailed
 )

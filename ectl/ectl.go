@@ -140,6 +140,30 @@ func (e *ETCDProcess) JoinCluster(peerURLs map[string]string) (bool, error) {
 	return true, nil
 }
 
+// IsInitialized returns if it is ready to run
+func (e *ETCDProcess) IsInitialized() bool {
+	s, err := os.Lstat(e.Config.DataDir)
+	if err != nil {
+		return false
+	}
+	return s.IsDir()
+}
+
+// IsRunning returns if there is a process running
+func (e *ETCDProcess) IsRunning() bool {
+	e.mux.Lock()
+	defer e.mux.Unlock()
+	if e.command == nil {
+		return false
+	}
+	fmt.Printf("e.command.ProcessState: %#v\n", e.command.ProcessState)
+	if e.command.ProcessState == nil {
+		return true
+	}
+	fmt.Printf("e.command.ProcessState.Exited(): %#v\n", e.command.ProcessState.Exited())
+	return !e.command.ProcessState.Exited()
+}
+
 // GetHealth shows the status of this node
 func (e *ETCDProcess) GetHealth() (bool, error) {
 	if e.command == nil {
