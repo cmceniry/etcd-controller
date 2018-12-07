@@ -294,9 +294,9 @@ func (c *Conductor) Run() {
 		if err != nil {
 			fmt.Printf(`Error getting cluster node status: %s`+"\n", err)
 		}
-		// Check if any current nodes have failed and should attempt a restart
+		// Check if any current nodes have stopped and should attempt a restart
 		for nodeName, nodeInfo := range c.CurrentNodes {
-			if !nodeInfo.IsRunning() {
+			if nodeInfo.IsStopped() {
 				fmt.Printf("Starting stopped node: %s\n", nodeName)
 				err := c.startNode(nodeName)
 				if err != nil {
