@@ -136,7 +136,7 @@ func (c *Conductor) etcdctlMemberAdd(ctlNode *NodeInfo, newNode *NodeInfo) (uint
 
 func (c *Conductor) initNewCluster(initNodeName string) error {
 	// TODO: shutdown all nodes
-	initNode, ok := c.NodeList[initNodeName]
+	initNode, ok := c.CurrentNodes[initNodeName]
 	if !ok {
 		return fmt.Errorf("Unknown init node: %s", initNodeName)
 	}
@@ -153,7 +153,6 @@ func (c *Conductor) initNewCluster(initNodeName string) error {
 	if err != nil {
 		return fmt.Errorf("init status failed: %s", err)
 	}
-	c.CurrentNodes[initNodeName] = &(*initNode)
 	return nil
 }
 
@@ -191,7 +190,7 @@ func (c *Conductor) etcdctlMemberList(ni *NodeInfo) (map[string]uint64, error) {
 }
 
 func (c *Conductor) addNodeToCluster(newNodeName string) error {
-	newNode, ok := c.NodeList[newNodeName]
+	newNode, ok := c.CurrentNodes[newNodeName]
 	if !ok {
 		return fmt.Errorf("Unknown add node: %s", newNodeName)
 	}
@@ -199,17 +198,19 @@ func (c *Conductor) addNodeToCluster(newNodeName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect: %s", err)
 	}
-	peerList := []string{}
-	var ctlNode *NodeInfo
-	for _, ni := range c.CurrentNodes {
-		ctlNode = ni
-		peerList = append(peerList, ni.PeerString())
+	ctlNode, ok := c.CurrentNodes[c.pickRandomUpNode()]
+	if !ok {
+		return fmt.Errorf("no up nodes")
 	}
 	adderID, newID, err := c.etcdctlMemberAdd(ctlNode, newNode)
 	if err != nil {
 		return fmt.Errorf("member add failed: %s", err)
 	}
 	fmt.Printf("AdderID: %x, New Member ID: %x\n", adderID, newID)
+	peerList := c.generatePeerList()
+	if len(peerList) == 0 {
+		return fmt.Errorf("peer list is empty")
+	}
 	peerList = append(peerList, newNode.PeerString())
 	err = dc.JoinCluster(peerList)
 	if err != nil {
@@ -245,34 +246,63 @@ func (c *Conductor) addNodeToCluster(newNodeName string) error {
 	if err != nil {
 		return fmt.Errorf("join status failed: %s", err)
 	}
-	c.CurrentNodes[newNodeName] = &(*newNode)
 	return nil
 }
 
-func (c *Conductor) pickRandomNodeFromList() string {
-	if len(c.NodeList) == 0 {
-		return ""
+// check if we have no running or runable members and indicate that we need
+// to build a cluster
+func (c *Conductor) checkNeedNewCluster() bool {
+	if len(c.CurrentNodes) == 0 {
+		return false
 	}
-	for n := range c.NodeList {
+	for _, ni := range c.CurrentNodes {
+		if ni.IsRunning() || ni.IsStopped() {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Conductor) pickRandomNode() string {
+	for n := range c.CurrentNodes {
 		return n
 	}
 	return ""
 }
 
-func (c *Conductor) pickRandomMissingNodeFromList() string {
-	for n := range c.NodeList {
-		if _, ok := c.CurrentNodes[n]; !ok {
-			return n
+func (c *Conductor) pickRandomUpNode() string {
+	for nn, ni := range c.CurrentNodes {
+		if ni.IsRunning() {
+			return nn
 		}
 	}
 	return ""
+}
+
+func (c *Conductor) pickRandomMissingNode() string {
+	for nn, ni := range c.CurrentNodes {
+		if !ni.IsRunning() && !ni.IsStopped() {
+			return nn
+		}
+	}
+	return ""
+}
+
+func (c *Conductor) generatePeerList() []string {
+	ret := []string{}
+	for _, ni := range c.CurrentNodes {
+		if ni.IsRunning() {
+			ret = append(ret, ni.PeerString())
+		}
+	}
+	return ret
 }
 
 // Run starts the main Conductor work loop
 func (c *Conductor) Run() {
 	c.runGRPCListener()
 
-	for t := range time.NewTicker(1 * time.Second).C {
+	for t := range time.NewTicker(5 * time.Second).C {
 		fmt.Printf("%s TICK!\n", t)
 		changed, err := c.checkNodeList()
 		if err != nil {
@@ -280,14 +310,19 @@ func (c *Conductor) Run() {
 			continue
 		}
 		if changed {
-			fmt.Printf("New node list:\n%#v\n", c.NodeList)
+			var dnl string
 			if len(c.NodeList) > 0 {
+				dnl = "New node list:\n"
 				for _, ni := range c.NodeList {
-					fmt.Printf("- %#v\n", ni)
+					if _, ok := c.CurrentNodes[ni.Name]; !ok {
+						c.CurrentNodes[ni.Name] = &(*ni)
+					}
+					dnl += fmt.Sprintf("    - %#v\n", ni)
 				}
 			} else {
-				fmt.Printf("- empty\n")
+				dnl = "New node list: empty\n"
 			}
+			fmt.Printf(dnl)
 		}
 		// TODO: Check all current nodes health
 		err = c.getClusterNodeStatus()
@@ -307,8 +342,8 @@ func (c *Conductor) Run() {
 		// TODO: Check if etcd cluster has nodes not in current node list
 		// TODO: Check if there are extra nodes and remove them first
 		// If empty cluster, init it
-		if len(c.CurrentNodes) == 0 && len(c.NodeList) > 0 {
-			initNodeName := c.pickRandomNodeFromList()
+		if c.checkNeedNewCluster() {
+			initNodeName := c.pickRandomNode()
 			fmt.Printf("Initializing Cluser with node %s\n", initNodeName)
 			err := c.initNewCluster(initNodeName)
 			if err != nil {
@@ -317,12 +352,12 @@ func (c *Conductor) Run() {
 			fmt.Printf("Initialization successful\n")
 			continue
 		}
-		// If there are missing nodes from the node list, add one of them at random
-		if newNodeName := c.pickRandomMissingNodeFromList(); newNodeName != "" {
+		// If there are uninitialized/failed nodes from the node list, add one of them at random
+		if newNodeName := c.pickRandomMissingNode(); newNodeName != "" {
 			fmt.Printf("Adding missing node to cluster: %s\n", newNodeName)
 			err := c.addNodeToCluster(newNodeName)
 			if err != nil {
-				fmt.Printf("Add Node Failure: %s: %s", newNodeName, err)
+				fmt.Printf("Add Node Failure: %s: %s\n", newNodeName, err)
 			}
 			fmt.Printf("Addition successful\n")
 			continue

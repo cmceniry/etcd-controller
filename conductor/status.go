@@ -7,7 +7,11 @@ import (
 )
 
 func (c *Conductor) getClusterNodeStatus() error {
-	for nn, ni := range c.NodeList {
+	for _, nn := range c.currentNodeNames() {
+		ni, ok := c.CurrentNodes[nn]
+		if !ok {
+			return fmt.Errorf("missing current node: %s", nn)
+		}
 		// TODO: if ni.ExternalETCD { continue }
 		dc, err := c.connectCommand(ni)
 		if err != nil {

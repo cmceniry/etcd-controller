@@ -3,6 +3,7 @@ package conductor
 import (
 	"io/ioutil"
 	"os"
+	"sort"
 
 	"google.golang.org/grpc"
 	yaml "gopkg.in/yaml.v2"
@@ -75,4 +76,13 @@ func (c *Conductor) loadYaml(d []byte) error {
 		}
 	}
 	return err
+}
+
+func (c *Conductor) currentNodeNames() []string {
+	cnl := []string{}
+	for nn := range c.CurrentNodes {
+		cnl = append(cnl, nn)
+	}
+	sort.Strings(cnl)
+	return cnl
 }

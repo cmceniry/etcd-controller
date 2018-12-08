@@ -1,0 +1,62 @@
+version: '3'
+
+networks:
+  ectest:
+    driver: bridge
+    #enable_ipv6: false
+    ipam:
+      driver: default
+      config:
+        - subnet: ${TESTNET:-172.27.0}.0/24
+
+services:
+  conductor:
+    command:
+      - /etcd-controller-conductor
+    image: "etcd-controller:snapshot"
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.100
+    volumes:
+      - "./config:/config"
+  controller001:
+    command:
+      - /etcd-controller
+    environment:
+      ETCDCONTROLLER_IP: ${TESTNET:-172.27.0}.101
+      ETCDCONTROLLER_NAME: ${TESTNAME:-test}-101
+    image: "etcd-controller:snapshot"
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.101
+  controller002:
+    command:
+      - /etcd-controller
+    environment:
+      ETCDCONTROLLER_IP: ${TESTNET:-172.27.0}.102
+      ETCDCONTROLLER_NAME: ${TESTNAME:-test}-102
+    image: "etcd-controller:snapshot"
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.102
+  controller003:
+    command:
+      - /etcd-controller
+    environment:
+      ETCDCONTROLLER_IP: ${TESTNET:-172.27.0}.103
+      ETCDCONTROLLER_NAME: ${TESTNAME:-test}-103
+    image: "etcd-controller:snapshot"
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.103
+  ctl:
+    image: "etcd-controller:snapshot"
+    environment:
+      ETCDCTL_API: "3"
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.10
+    command:
+      - /bin/sleep
+      - "3600"
+
