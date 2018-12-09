@@ -56,6 +56,13 @@ func (n NodeInfo) PeerString() string {
 	return fmt.Sprintf("%s=http://%s:%d", n.Name, n.IP, n.PeerPort)
 }
 
+// IsExtra returns if a node is in the CurrentNodes but not in the official
+// node list
+func (c *Conductor) IsExtra(nodeName string) bool {
+	_, ok := c.NodeList[nodeName]
+	return !ok
+}
+
 // NewConductor is the general Conductor constructor.
 func NewConductor(c Config) *Conductor {
 	return &Conductor{
@@ -132,6 +139,26 @@ func (c *Conductor) etcdctlMemberAdd(ctlNode *NodeInfo, newNode *NodeInfo) (uint
 		return 0, 0, fmt.Errorf("MemberAdd failed: %s", err)
 	}
 	return resp.Header.MemberId, resp.Member.ID, nil
+}
+
+func (c *Conductor) etcdctlGetMemberID(ctlNode *NodeInfo, needleNode *NodeInfo) (uint64, error) {
+	client, err := c.etcdDial(ctlNode)
+	if err != nil {
+		return 0, err
+	}
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	list, err := client.MemberList(ctx)
+	cancel()
+	if err != nil {
+		return 0, err
+	}
+	for _, m := range list.Members {
+		if m.GetName() == needleNode.Name {
+			return m.GetID(), nil
+		}
+	}
+	return 0, fmt.Errorf("node not found %s", needleNode.Name)
 }
 
 func (c *Conductor) initNewCluster(initNodeName string) error {
@@ -339,8 +366,13 @@ func (c *Conductor) Run() {
 				}
 			}
 		}
-		// TODO: Check if etcd cluster has nodes not in current node list
 		// TODO: Check if there are extra nodes and remove them first
+		err = c.removeExtraNodesFromCluster()
+		if err != nil {
+			fmt.Printf("removeExtraNodesFromCluster: %s", err)
+			continue
+		}
+		// TODO: Check if etcd cluster has nodes not in current node list
 		// If empty cluster, init it
 		if c.checkNeedNewCluster() {
 			initNodeName := c.pickRandomNode()
