@@ -3,13 +3,20 @@ package conductor
 import (
 	"context"
 	"fmt"
-	"net"
 
 	pb "github.com/cmceniry/etcd-controller/conductor/conductorpb"
 	"google.golang.org/grpc"
 )
 
 //go:generate protoc -I conductorpb --go_out=plugins=grpc:conductorpb conductor.proto
+
+// GetInfo returns information about the conductor
+func (c *Conductor) GetInfo(ctx context.Context, req *pb.GetInfoRequest) (*pb.GetInfoResponse, error) {
+	resp := &pb.GetInfoResponse{
+		IsConductor: c.IsRunning(),
+	}
+	return resp, nil
+}
 
 // GetStatus returns the condition of the entire cluster
 func (c *Conductor) GetStatus(ctx context.Context, req *pb.GetStatusRequest) (*pb.GetStatusResponse, error) {
@@ -41,17 +48,8 @@ func (c *Conductor) GetNodeStatus(ctx context.Context, req *pb.GetNodeStatusRequ
 	return resp, nil
 }
 
-func (c *Conductor) runGRPCListener() error {
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", c.Config.CommandPort))
-	if err != nil {
-		return err
-	}
-	c.Listener = l
-	var opts []grpc.ServerOption
-	c.GRPCServer = grpc.NewServer(opts...)
-	pb.RegisterConductorServer(c.GRPCServer, c)
-	go func() {
-		c.GRPCServer.Serve(c.Listener)
-	}()
-	return nil
+// RegisterWithGRPCServer handles the connection of this service with the
+// CommandPort
+func (c *Conductor) RegisterWithGRPCServer(g *grpc.Server) {
+	pb.RegisterConductorServer(g, c)
 }

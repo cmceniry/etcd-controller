@@ -36,6 +36,11 @@ func NewClient(ip string, cp int, opts []grpc.DialOption) (*Client, error) {
 	return c, nil
 }
 
+// ConductorInfo displays information about the Conductor
+type ConductorInfo struct {
+	IsConductor bool
+}
+
 // NodeStatus wraps the GRPC node status response
 type NodeStatus struct {
 	Name   string
@@ -45,6 +50,19 @@ type NodeStatus struct {
 // ClusterStatus collect the NodeStatus of all nodes in the cluster
 type ClusterStatus struct {
 	Nodes []NodeStatus
+}
+
+// Info wraps GRPC GetInfo for the conductor
+func (c *Client) Info() (ConductorInfo, error) {
+	sr := &pb.GetInfoRequest{}
+	r, err := c.client.GetInfo(context.Background(), sr)
+	if err != nil {
+		return ConductorInfo{}, fmt.Errorf("%s:%d GRPC call failure: %s", c.IP, c.CommandPort, err)
+	}
+	ci := ConductorInfo{
+		IsConductor: r.IsConductor,
+	}
+	return ci, nil
 }
 
 // Status wraps GRPC GetStatus for the cluster

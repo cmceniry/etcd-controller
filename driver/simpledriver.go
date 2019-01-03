@@ -69,23 +69,10 @@ func NewSimpleDriver(c SimpleDriverConfig) (*SimpleDriver, error) {
 	return s, nil
 }
 
-func (s *SimpleDriver) runGRPCListener() error {
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", s.Config.CommandPort))
-	if err != nil {
-		return err
-	}
-	s.Listener = l
-	var opts []grpc.ServerOption
-	s.GRPCServer = grpc.NewServer(opts...)
-	pb.RegisterDriverServer(s.GRPCServer, s)
-	go func() {
-		s.GRPCServer.Serve(s.Listener)
-	}()
-	return nil
-}
-
-func (s *SimpleDriver) Run() error {
-	return s.runGRPCListener()
+// RegisterWithGRPCServer handles the connection of this service with the
+// CommandPort
+func (s *SimpleDriver) RegisterWithGRPCServer(g *grpc.Server) {
+	pb.RegisterDriverServer(g, s)
 }
 
 func (s *SimpleDriver) GetStatus(ctx context.Context, req *pb.StatusRequest) (*pb.StatusResponse, error) {

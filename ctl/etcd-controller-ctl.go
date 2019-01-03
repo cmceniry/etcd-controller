@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 	"strconv"
+	"strings"
 
-	"github.com/cmceniry/etcd-controller/driver"
 	"github.com/cmceniry/etcd-controller/conductor"
+	"github.com/cmceniry/etcd-controller/driver"
 	"google.golang.org/grpc"
 )
 
@@ -32,8 +32,6 @@ func mustConductorClient(ip string, port int, opts []grpc.DialOption) *conductor
 	}
 	return c
 }
-
-
 
 func main() {
 	if len(os.Args) < 3 {
@@ -67,6 +65,16 @@ func main() {
 			fail(-1, "%s status failure: %s\n", node, err)
 		}
 		fmt.Printf("%s Status: %d\n", node, status)
+	case "conductor":
+		info, err := mustConductorClient(nodeIP, nodePort, opts).Info()
+		if err != nil {
+			fail(-1, "%s info failure: %s\n", node, err)
+		}
+		if !info.IsConductor {
+			fmt.Printf("no\n")
+			os.Exit(1)
+		}
+		fmt.Printf("yes\n")
 	case "cstatus":
 		status, err := mustConductorClient(nodeIP, nodePort, opts).Status()
 		if err != nil {

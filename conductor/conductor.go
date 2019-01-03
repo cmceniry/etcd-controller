@@ -24,8 +24,9 @@ type Conductor struct {
 	NodeList         map[string]*NodeInfo
 	CurrentNodes     map[string]*NodeInfo
 	lastNodeListRead time.Time
+	running          bool
 
-	Listener net.Listener
+	Listener   net.Listener
 	GRPCServer *grpc.Server
 }
 
@@ -80,7 +81,7 @@ func (c *Conductor) connectCommand(ni *NodeInfo) (*driver.SimpleClient, error) {
 	return driver.NewSimpleClient(ni.IP, ni.CommandPort, ni.CommandOpts)
 }
 
-func (c *Conductor) etcdDial(ni *NodeInfo) (*clientv3.Client, error)  {
+func (c *Conductor) etcdDial(ni *NodeInfo) (*clientv3.Client, error) {
 	return clientv3.New(clientv3.Config{
 		Endpoints:   []string{ni.ClientURL()},
 		DialTimeout: 5 * time.Second,
@@ -325,10 +326,13 @@ func (c *Conductor) generatePeerList() []string {
 	return ret
 }
 
+func (c *Conductor) IsRunning() bool {
+	return c.running
+}
+
 // Run starts the main Conductor work loop
 func (c *Conductor) Run() {
-	c.runGRPCListener()
-
+	c.running = true
 	for t := range time.NewTicker(5 * time.Second).C {
 		fmt.Printf("%s TICK!\n", t)
 		changed, err := c.checkNodeList()
