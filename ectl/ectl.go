@@ -2,7 +2,10 @@ package ectl
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,12 +136,12 @@ func (e *ETCDProcess) StartInitial() error {
 func (e *ETCDProcess) JoinCluster(peerURLs map[string]string) (bool, error) {
 	peers := []string{}
 	for p, u := range peerURLs {
-		peers = append(peers, p + "=" + u)
+		peers = append(peers, p+"="+u)
 	}
 	startOpts := append(
 		e.Config.buildEnvironment(),
 		"ETCD_INITIAL_CLUSTER_STATE=existing",
-		"ETCD_INITIAL_CLUSTER=" + strings.Join(peers, ","),
+		"ETCD_INITIAL_CLUSTER="+strings.Join(peers, ","),
 	)
 	err := e.start(startOpts)
 	if err != nil {
@@ -176,17 +179,42 @@ func (e *ETCDProcess) GetHealth() (bool, error) {
 	if e.command == nil {
 		return false, fmt.Errorf("no etcd server running")
 	}
+	url := "http://127.0.0.1:2379"
+	var tlsConfig *tls.Config
+	if e.Config.ClientCertAuth {
+		url = "https://127.0.0.1:2379"
+		cert, err := tls.LoadX509KeyPair(e.Config.CertFile, e.Config.KeyFile)
+		if err != nil {
+			return false, err
+		}
+		caPool := x509.NewCertPool()
+		caData, err := ioutil.ReadFile(e.Config.CAFile)
+		if err != nil {
+			return false, err
+		}
+		if ok := caPool.AppendCertsFromPEM(caData); !ok {
+			return false, fmt.Errorf("unable to load ca certs")
+		}
+		tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      caPool,
+			ServerName:   "127.0.0.1",
+		}
+	}
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"http://localhost:2379"},
+		Endpoints:   []string{url},
 		DialTimeout: 5 * time.Second,
+		TLS:         tlsConfig,
 	})
 	if err != nil {
 		return false, err
 	}
 	defer client.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	resp, err := client.Status(ctx, "http://localhost:2379")
+	resp, err := client.Status(ctx, url)
 	cancel()
+	fmt.Printf("StatusResponse: %#v\n", resp)
+	fmt.Printf("StatusError: %s\n", err)
 	if err == nil {
 		fmt.Printf("%#v\n", resp)
 	}

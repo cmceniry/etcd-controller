@@ -5,7 +5,6 @@ import (
 	"os"
 	"sort"
 
-	"google.golang.org/grpc"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -13,6 +12,12 @@ import (
 type Config struct {
 	NodeListFilename string
 	CommandPort      int
+	PeerTLSCA        string
+	PeerTLSCert      string
+	PeerTLSKey       string
+	ClientTLSCA      string
+	ClientTLSCert    string
+	ClientTLSKey     string
 }
 
 // NodeInfoConfig is the data stored in a node list file which can be used to
@@ -59,14 +64,18 @@ func (c *Conductor) loadYaml(d []byte) error {
 	for _, n := range data {
 		seen[n.Name] = struct{}{}
 		ni := &NodeInfo{
-			Name:        n.Name,
-			IP:          n.IP,
-			CommandPort: n.CommandPort,
-			PeerPort:    n.PeerPort,
-			ClientPort:  n.ClientPort,
+			Name:         n.Name,
+			IP:           n.IP,
+			CommandPort:  n.CommandPort,
+			PeerPort:     n.PeerPort,
+			PeerSecure:   c.peerTLS,
+			ClientPort:   n.ClientPort,
+			ClientSecure: c.clientTLS,
 		}
+
+		// TODO change here ?
 		if n.Insecure {
-			ni.CommandOpts = []grpc.DialOption{grpc.WithInsecure()}
+			// ni.CommandOpts = []grpc.DialOption{grpc.WithInsecure()}
 		}
 		c.NodeList[n.Name] = ni
 	}

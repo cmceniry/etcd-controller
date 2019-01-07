@@ -2,15 +2,21 @@ package conductor
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"reflect"
 	"time"
 
 	"github.com/cmceniry/etcd-controller/driver"
+	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	"go.etcd.io/etcd/pkg/transport"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // The Conductor is the unified driving entity. Only one runs at a time in the
@@ -28,33 +34,52 @@ type Conductor struct {
 
 	Listener   net.Listener
 	GRPCServer *grpc.Server
+	clientTLS  bool
+	peerTLS    bool
 }
 
 // NodeInfo holds simple information about the nodes that this Conductor is
 // watching.
 type NodeInfo struct {
-	Name        string
-	IP          string
-	CommandPort int
-	CommandOpts []grpc.DialOption
-	PeerPort    int
-	ClientPort  int
-	Status      int32
+	Name         string
+	IP           string
+	CommandPort  int
+	PeerPort     int
+	PeerSecure   bool
+	ClientPort   int
+	ClientSecure bool
+	Status       int32
+}
+
+// ClientProto returns the protocol (http/https) for the client connection
+func (n NodeInfo) ClientProto() string {
+	if n.ClientSecure {
+		return "https"
+	}
+	return "http"
 }
 
 // ClientURL returns the URL for etcd clients to connect to on this node
 func (n NodeInfo) ClientURL() string {
-	return fmt.Sprintf("http://%s:%d", n.IP, n.ClientPort)
+	return fmt.Sprintf("%s://%s:%d", n.ClientProto(), n.IP, n.ClientPort)
+}
+
+// PeerProto returns the protocol (http/https) for the peer connections
+func (n NodeInfo) PeerProto() string {
+	if n.PeerSecure {
+		return "https"
+	}
+	return "http"
 }
 
 // PeerURL returns the URL for etcd peer to connect to on this node
 func (n NodeInfo) PeerURL() string {
-	return fmt.Sprintf("http://%s:%d", n.IP, n.PeerPort)
+	return fmt.Sprintf("%s://%s:%d", n.PeerProto(), n.IP, n.PeerPort)
 }
 
 // PeerString returns the value to use in the cluster node list
 func (n NodeInfo) PeerString() string {
-	return fmt.Sprintf("%s=http://%s:%d", n.Name, n.IP, n.PeerPort)
+	return fmt.Sprintf("%s=%s", n.Name, n.PeerURL())
 }
 
 // IsExtra returns if a node is in the CurrentNodes but not in the official
@@ -66,11 +91,18 @@ func (c *Conductor) IsExtra(nodeName string) bool {
 
 // NewConductor is the general Conductor constructor.
 func NewConductor(c Config) *Conductor {
-	return &Conductor{
+	con := &Conductor{
 		Config:       &c,
 		NodeList:     make(map[string]*NodeInfo),
 		CurrentNodes: make(map[string]*NodeInfo),
 	}
+	if c.PeerTLSCA != "" && c.PeerTLSCert != "" && c.PeerTLSKey != "" {
+		con.peerTLS = true
+	}
+	if c.ClientTLSCA != "" && c.ClientTLSCert != "" && c.ClientTLSKey != "" {
+		con.clientTLS = true
+	}
+	return con
 }
 
 func (c *Conductor) main() {
@@ -78,13 +110,49 @@ func (c *Conductor) main() {
 }
 
 func (c *Conductor) connectCommand(ni *NodeInfo) (*driver.SimpleClient, error) {
-	return driver.NewSimpleClient(ni.IP, ni.CommandPort, ni.CommandOpts)
+	do := []grpc.DialOption{}
+	if c.peerTLS {
+		cert, err := tls.LoadX509KeyPair(c.Config.PeerTLSCert, c.Config.PeerTLSKey)
+		if err != nil {
+			return nil, err
+		}
+		caPool := x509.NewCertPool()
+		caData, err := ioutil.ReadFile(c.Config.PeerTLSCA)
+		if err != nil {
+			return nil, err
+		}
+		if ok := caPool.AppendCertsFromPEM(caData); !ok {
+			return nil, fmt.Errorf("unable to load ca certs")
+		}
+		do = append(do, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      caPool,
+			ServerName:   ni.IP,
+		})))
+	} else {
+		do = append(do, grpc.WithInsecure())
+	}
+	return driver.NewSimpleClient(ni.IP, ni.CommandPort, do)
 }
 
 func (c *Conductor) etcdDial(ni *NodeInfo) (*clientv3.Client, error) {
+	var tlsConfig *tls.Config
+	if c.clientTLS {
+		tlsInfo := transport.TLSInfo{
+			TrustedCAFile: c.Config.ClientTLSCA,
+			CertFile:      c.Config.ClientTLSCert,
+			KeyFile:       c.Config.ClientTLSKey,
+		}
+		t, err := tlsInfo.ClientConfig()
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig = t
+	}
 	return clientv3.New(clientv3.Config{
 		Endpoints:   []string{ni.ClientURL()},
 		DialTimeout: 5 * time.Second,
+		TLS:         tlsConfig,
 	})
 }
 
@@ -166,20 +234,20 @@ func (c *Conductor) initNewCluster(initNodeName string) error {
 	// TODO: shutdown all nodes
 	initNode, ok := c.CurrentNodes[initNodeName]
 	if !ok {
-		return fmt.Errorf("Unknown init node: %s", initNodeName)
+		return errors.Errorf("unknown init node %s", initNodeName)
 	}
 	dc, err := c.connectCommand(initNode)
 	if err != nil {
-		return fmt.Errorf("failed to connect: %s", err)
+		return errors.Wrap(err, "failed to connect")
 	}
 	err = dc.InitCluster()
 	if err != nil {
-		return fmt.Errorf("init failed: %s", err)
+		return errors.Wrap(err, "init failed")
 	}
 	time.Sleep(5 * time.Second)
 	err = c.etcdctlStatus(initNode)
 	if err != nil {
-		return fmt.Errorf("init status failed: %s", err)
+		return errors.Wrap(err, "init status failed")
 	}
 	return nil
 }
@@ -360,6 +428,8 @@ func (c *Conductor) Run() {
 		if err != nil {
 			fmt.Printf(`Error getting cluster node status: %s`+"\n", err)
 		}
+		// Show status
+		fmt.Printf(c.printNodesStatus())
 		// Check if any current nodes have stopped and should attempt a restart
 		for nodeName, nodeInfo := range c.CurrentNodes {
 			if nodeInfo.IsStopped() {
@@ -384,8 +454,9 @@ func (c *Conductor) Run() {
 			err := c.initNewCluster(initNodeName)
 			if err != nil {
 				fmt.Printf("Init Node Failure: %s: %s\n", initNodeName, err)
+			} else {
+				fmt.Printf("Initialization successful\n")
 			}
-			fmt.Printf("Initialization successful\n")
 			continue
 		}
 		// If there are uninitialized/failed nodes from the node list, add one of them at random

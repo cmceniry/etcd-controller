@@ -1,0 +1,85 @@
+version: '3'
+
+networks:
+  ectest:
+    driver: bridge
+    #enable_ipv6: false
+    ipam:
+      driver: default
+      config:
+        - subnet: ${TESTNET:-172.27.0}.0/24
+
+services:
+  controller001:
+    command:
+      - /etcd-controller
+    environment:
+      ETCDCONTROLLER_IP: ${TESTNET:-172.27.0}.101
+      ETCDCONTROLLER_NAME: ${TESTNAME:-test}-101
+      ETCDCONTROLLER_PEER_CA: /config/peer-ca.crt
+      ETCDCONTROLLER_PEER_CERT: /config/node1-peer.crt
+      ETCDCONTROLLER_PEER_KEY: /config/node1-peer.key
+      ETCDCONTROLLER_CLIENT_CA: /config/client-ca.crt
+      ETCDCONTROLLER_CLIENT_CERT: /config/node1-client.crt
+      ETCDCONTROLLER_CLIENT_KEY: /config/node1-client.key
+    image: "etcd-controller:snapshot"
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.101
+    volumes:
+      - "./config:/config"
+  controller002:
+    command:
+      - /etcd-controller
+    environment:
+      ETCDCONTROLLER_IP: ${TESTNET:-172.27.0}.102
+      ETCDCONTROLLER_NAME: ${TESTNAME:-test}-102
+      ETCDCONTROLLER_PEER_CA: /config/peer-ca.crt
+      ETCDCONTROLLER_PEER_CERT: /config/node2-peer.crt
+      ETCDCONTROLLER_PEER_KEY: /config/node2-peer.key
+      ETCDCONTROLLER_CLIENT_CA: /config/client-ca.crt
+      ETCDCONTROLLER_CLIENT_CERT: /config/node2-client.crt
+      ETCDCONTROLLER_CLIENT_KEY: /config/node2-client.key
+    image: "etcd-controller:snapshot"
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.102
+    volumes:
+      - "./config:/config"
+  controller003:
+    command:
+      - /etcd-controller
+    environment:
+      ETCDCONTROLLER_IP: ${TESTNET:-172.27.0}.103
+      ETCDCONTROLLER_NAME: ${TESTNAME:-test}-103
+      ETCDCONTROLLER_PEER_CA: /config/peer-ca.crt
+      ETCDCONTROLLER_PEER_CERT: /config/node3-peer.crt
+      ETCDCONTROLLER_PEER_KEY: /config/node3-peer.key
+      ETCDCONTROLLER_CLIENT_CA: /config/client-ca.crt
+      ETCDCONTROLLER_CLIENT_CERT: /config/node3-client.crt
+      ETCDCONTROLLER_CLIENT_KEY: /config/node3-client.key
+    image: "etcd-controller:snapshot"
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.103
+    volumes:
+      - "./config:/config"
+  ctl:
+    image: "etcd-controller:snapshot"
+    environment:
+      ETCDCTL_API: "3"
+      ETCDCTL_CACERT: "/config/client-ca.crt"
+      ETCDCTL_CERT: "/config/controller-client.crt"
+      ETCDCTL_KEY: "/config/controller-client.key"
+      ETCDCONTROLLER_PEER_CA: /config/peer-ca.crt
+      ETCDCONTROLLER_PEER_CERT: /config/controller-peer.crt
+      ETCDCONTROLLER_PEER_KEY: /config/controller-peer.key
+    networks:
+      ectest:
+        ipv4_address: ${TESTNET:-172.27.0}.10
+    volumes:
+      - "./config:/config"
+    command:
+      - /bin/sleep
+      - "3600"
+

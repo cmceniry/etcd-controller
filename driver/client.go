@@ -79,7 +79,7 @@ func (c *SimpleClient) InitCluster() error {
 		return fmt.Errorf("%s:%d GRPC call failure: %s", c.IP, c.CommandPort, err)
 	}
 	if !r.Success {
-		return fmt.Errorf("%s:%d init failure: %s", c.IP, c.CommandPort, err)
+		return fmt.Errorf("%s:%d init failure: %s : %s", c.IP, c.CommandPort, r.ErrorMessage, err)
 	}
 	return nil
 }

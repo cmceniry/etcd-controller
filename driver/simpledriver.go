@@ -15,6 +15,8 @@ type SimpleDriver struct {
 	Process    *ectl.ETCDProcess
 	Listener   net.Listener
 	GRPCServer *grpc.Server
+	peerTLS    bool
+	clientTLS  bool
 	failed     bool
 }
 
@@ -26,6 +28,14 @@ type SimpleDriverConfig struct {
 	ClientPort  int
 	PeerPort    int
 	CommandPort int
+
+	PeerTLSCA   string
+	PeerTLSCert string
+	PeerTLSKey  string
+
+	ClientTLSCA   string
+	ClientTLSCert string
+	ClientTLSKey  string
 }
 
 func NewSimpleDriver(c SimpleDriverConfig) (*SimpleDriver, error) {
@@ -52,16 +62,43 @@ func NewSimpleDriver(c SimpleDriverConfig) (*SimpleDriver, error) {
 	}
 
 	s := &SimpleDriver{Config: c}
+
+	if c.PeerTLSCA != "" && c.PeerTLSCert != "" && c.PeerTLSKey != "" {
+		s.peerTLS = true
+	}
+	if c.ClientTLSCA != "" && c.ClientTLSCert != "" && c.ClientTLSKey != "" {
+		s.clientTLS = true
+	}
+
+	peerProto := "http"
+	if s.peerTLS {
+		peerProto = "https"
+	}
+	clientProto := "http"
+	if s.clientTLS {
+		clientProto = "https"
+	}
+
 	pc := ectl.ETCDConfig{
 		Binary:                   s.Config.Binary,
 		Name:                     s.Config.Name,
 		DataDir:                  s.Config.DataDir,
-		AdvertiseClientURLs:      fmt.Sprintf("http://%s:%d", s.Config.IP, s.Config.ClientPort),
-		ListenClientURLs:         fmt.Sprintf("http://0.0.0.0:%d", s.Config.ClientPort),
-		ClientCertAuth:           false,
-		InitialAdvertisePeerURLs: fmt.Sprintf("http://%s:%d", s.Config.IP, s.Config.PeerPort),
-		ListenPeerURLs:           fmt.Sprintf("http://0.0.0.0:%d", s.Config.PeerPort),
-		PeerClientCertAuth:       false,
+		AdvertiseClientURLs:      fmt.Sprintf("%s://%s:%d", clientProto, s.Config.IP, s.Config.ClientPort),
+		ListenClientURLs:         fmt.Sprintf("%s://0.0.0.0:%d", clientProto, s.Config.ClientPort),
+		InitialAdvertisePeerURLs: fmt.Sprintf("%s://%s:%d", peerProto, s.Config.IP, s.Config.PeerPort),
+		ListenPeerURLs:           fmt.Sprintf("%s://0.0.0.0:%d", peerProto, s.Config.PeerPort),
+	}
+	if s.peerTLS {
+		pc.PeerClientCertAuth = true
+		pc.PeerCAFile = c.PeerTLSCA
+		pc.PeerCertFile = c.PeerTLSCert
+		pc.PeerKeyFile = c.PeerTLSKey
+	}
+	if s.clientTLS {
+		pc.ClientCertAuth = true
+		pc.CAFile = c.ClientTLSCA
+		pc.CertFile = c.ClientTLSCert
+		pc.KeyFile = c.ClientTLSKey
 	}
 	s.Process = &ectl.ETCDProcess{
 		Config: pc,
@@ -87,6 +124,7 @@ func (s *SimpleDriver) GetStatus(ctx context.Context, req *pb.StatusRequest) (*p
 	}
 	h, err := s.Process.GetHealth()
 	if err != nil || !h {
+		fmt.Printf("Health failed: %t - err: %s\n", h, err)
 		r.State = StateUnknown
 		return r, nil
 	}

@@ -1,7 +1,10 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"sort"
 	"strconv"
@@ -10,11 +13,32 @@ import (
 	"github.com/cmceniry/etcd-controller/conductor"
 	"github.com/cmceniry/etcd-controller/driver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func fail(rc int, message string, args ...interface{}) {
 	fmt.Printf(message, args...)
 	os.Exit(rc)
+}
+
+func addGRPCTLSOptions(nodeIP, cafile, certfile, keyfile string) (grpc.DialOption, error) {
+	c, err := tls.LoadX509KeyPair(certfile, keyfile)
+	if err != nil {
+		return nil, err
+	}
+	caPool := x509.NewCertPool()
+	caData, err := ioutil.ReadFile(cafile)
+	if err != nil {
+		return nil, err
+	}
+	if ok := caPool.AppendCertsFromPEM(caData); !ok {
+		return nil, fmt.Errorf("unable to load ca certs")
+	}
+	return grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{c},
+		RootCAs:      caPool,
+		ServerName:   nodeIP,
+	})), nil
 }
 
 func mustSimpleClient(ip string, port int, opts []grpc.DialOption) *driver.SimpleClient {
@@ -51,7 +75,20 @@ func main() {
 	}
 
 	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithInsecure())
+	if os.Getenv("ETCDCONTROLLER_PEER_CA") != "" && os.Getenv("ETCDCONTROLLER_PEER_CERT") != "" && os.Getenv("ETCDCONTROLLER_PEER_KEY") != "" {
+		cred, err := addGRPCTLSOptions(
+			nodeIP,
+			os.Getenv("ETCDCONTROLLER_PEER_CA"),
+			os.Getenv("ETCDCONTROLLER_PEER_CERT"),
+			os.Getenv("ETCDCONTROLLER_PEER_KEY"),
+		)
+		if err != nil {
+			fail(-1, `GRPC TLS Errors: %s`, err)
+		}
+		opts = append(opts, cred)
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
 
 	switch action {
 	case "init":
