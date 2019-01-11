@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/cmceniry/etcd-controller/conductor"
@@ -39,13 +40,17 @@ func addGRPCTLSOptions(cafile, certfile, keyfile string) (grpc.ServerOption, err
 func main() {
 	v := map[string]string{
 		"ETCDCONTROLLER_NODELISTFILENAME": "/config/node-list.yaml",
+		"ETCDCONTROLLER_COMMAND_PORT":     "4270",
+		"ETCDCONTROLLER_SERF_PORT":        "4271",
 		"ETCDCONTROLLER_NAME":             "test001",
 		"ETCDCONTROLLER_IP":               "127.0.0.1",
 		"ETCDCONTROLLER_BINARY":           "/usr/local/bin/etcd",
 		"ETCDCONTROLLER_DATADIR":          "/var/lib/etcd",
+		"ETCDCONTROLLER_PEER_PORT":        "2380",
 		"ETCDCONTROLLER_PEER_CA":          "",
 		"ETCDCONTROLLER_PEER_CERT":        "",
 		"ETCDCONTROLLER_PEER_KEY":         "",
+		"ETCDCONTROLLER_CLIENT_PORT":      "2379",
 		"ETCDCONTROLLER_CLIENT_CA":        "",
 		"ETCDCONTROLLER_CLIENT_CERT":      "",
 		"ETCDCONTROLLER_CLIENT_KEY":       "",
@@ -54,6 +59,25 @@ func main() {
 		if os.Getenv(k) != "" {
 			v[k] = os.Getenv(k)
 		}
+	}
+	p := map[string]int{
+		"ETCDCONTROLLER_COMMAND_PORT": 4270,
+		"ETCDCONTROLLER_SERF_PORT":    4271,
+		"ETCDCONTROLLER_PEER_PORT":    2380,
+		"ETCDCONTROLLER_CLIENT_PORT":  2379,
+	}
+	for pn := range p {
+		vp, ok := v[pn]
+		if !ok {
+			fmt.Printf("Unable to find %s; using default %d\n", pn, p[pn])
+			continue
+		}
+		val, err := strconv.Atoi(vp)
+		if err != nil {
+			fmt.Printf("Unable to parse %s: %s; using default %d\n", pn, vp, p[pn])
+			continue
+		}
+		p[pn] = val
 	}
 
 	peerTLS := false
@@ -108,9 +132,9 @@ func main() {
 		Name:        v["ETCDCONTROLLER_NAME"],
 		DataDir:     v["ETCDCONTROLLER_DATADIR"],
 		IP:          v["ETCDCONTROLLER_IP"],
-		ClientPort:  2379,
-		PeerPort:    2380,
-		CommandPort: 4270,
+		ClientPort:  p["ETCDCONTROLLER_CLIENT_PORT"],
+		PeerPort:    p["ETCDCONTROLLER_PEER_PORT"],
+		CommandPort: p["ETCDCONTROLLER_COMMAND_PORT"],
 	}
 	if peerTLS {
 		dc.PeerTLSCA = v["ETCDCONTROLLER_PEER_CA"]
@@ -130,7 +154,7 @@ func main() {
 
 	nc := conductor.Config{
 		NodeListFilename: v["ETCDCONTROLLER_NODELISTFILENAME"],
-		CommandPort:      4270,
+		CommandPort:      p["ETCDCONTROLLER_COMMAND_PORT"],
 	}
 	if peerTLS {
 		nc.PeerTLSCA = v["ETCDCONTROLLER_PEER_CA"]
@@ -145,7 +169,7 @@ func main() {
 	c := conductor.NewConductor(nc)
 	c.RegisterWithGRPCServer(gserver)
 
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", 4270))
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", p["ETCDCONTROLLER_COMMAND_PORT"]))
 	if err != nil {
 		panic(err)
 	}
@@ -163,7 +187,7 @@ func main() {
 		group.Config{
 			Name:             v["ETCDCONTROLLER_NAME"],
 			IP:               v["ETCDCONTROLLER_IP"],
-			SerfPort:         4271,
+			SerfPort:         p["ETCDCONTROLLER_SERF_PORT"],
 			NodeListFilename: v["ETCDCONTROLLER_NODELISTFILENAME"],
 		},
 	)

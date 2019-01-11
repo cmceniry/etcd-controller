@@ -174,15 +174,19 @@ func (e *ETCDProcess) IsRunning() bool {
 	return !e.command.ProcessState.Exited()
 }
 
+func (e *ETCDProcess) getLocalURL() string {
+	// TODO: Probably put some intelligence here to convert to 127.0.0.1?
+	us := strings.Split(e.Config.AdvertiseClientURLs, ",")
+	return us[0]
+}
+
 // GetHealth shows the status of this node
 func (e *ETCDProcess) GetHealth() (bool, error) {
 	if e.command == nil {
 		return false, fmt.Errorf("no etcd server running")
 	}
-	url := "http://127.0.0.1:2379"
 	var tlsConfig *tls.Config
 	if e.Config.ClientCertAuth {
-		url = "https://127.0.0.1:2379"
 		cert, err := tls.LoadX509KeyPair(e.Config.CertFile, e.Config.KeyFile)
 		if err != nil {
 			return false, err
@@ -201,6 +205,7 @@ func (e *ETCDProcess) GetHealth() (bool, error) {
 			ServerName:   "127.0.0.1",
 		}
 	}
+	url := e.getLocalURL()
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{url},
 		DialTimeout: 5 * time.Second,
