@@ -13,6 +13,7 @@ import (
 	"github.com/cmceniry/etcd-controller/conductor"
 	"github.com/cmceniry/etcd-controller/driver"
 	"github.com/cmceniry/etcd-controller/group"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -38,6 +39,10 @@ func addGRPCTLSOptions(cafile, certfile, keyfile string) (grpc.ServerOption, err
 }
 
 func main() {
+	mainlog := log.WithFields(log.Fields{
+		"component": "main",
+	})
+
 	v := map[string]string{
 		"ETCDCONTROLLER_NODELISTFILENAME": "/config/node-list.yaml",
 		"ETCDCONTROLLER_COMMAND_PORT":     "4270",
@@ -69,12 +74,12 @@ func main() {
 	for pn := range p {
 		vp, ok := v[pn]
 		if !ok {
-			fmt.Printf("Unable to find %s; using default %d\n", pn, p[pn])
+			mainlog.Infof("Unable to find %s; using default %d", pn, p[pn])
 			continue
 		}
 		val, err := strconv.Atoi(vp)
 		if err != nil {
-			fmt.Printf("Unable to parse %s: %s; using default %d\n", pn, vp, p[pn])
+			mainlog.Errorf("Unable to parse %s: %s; using default %d", pn, vp, p[pn])
 			continue
 		}
 		p[pn] = val
@@ -90,7 +95,7 @@ func main() {
 	if peerTLS {
 		for _, f := range []string{"CA", "CERT", "KEY"} {
 			if v["ETCDCONTROLLER_PEER_"+f] == "" {
-				fmt.Printf("Disabling Peer TLS: missing ETCDCONTROLLER_PEER_%s definition\n", f)
+				mainlog.Infof("Disabling Peer TLS: missing ETCDCONTROLLER_PEER_%s definition", f)
 				peerTLS = false
 			}
 		}
@@ -106,7 +111,7 @@ func main() {
 	if clientTLS {
 		for _, f := range []string{"CA", "CERT", "KEY"} {
 			if v["ETCDCONTROLLER_CLIENT_"+f] == "" {
-				fmt.Printf("Disabling Client TLS: missing ETCDCONTROLLER_CLIENT_%s definition\n", f)
+				mainlog.Infof("Disabling Client TLS: missing ETCDCONTROLLER_CLIENT_%s definition", f)
 				clientTLS = false
 			}
 		}
@@ -120,7 +125,7 @@ func main() {
 			v["ETCDCONTROLLER_PEER_KEY"],
 		)
 		if err != nil {
-			fmt.Printf("Disable GRPC TLS - failed to load: %s", err)
+			log.Errorf("Disable GRPC TLS - failed to load: %s", err)
 		} else {
 			opts = append(opts, cred)
 		}
@@ -135,6 +140,9 @@ func main() {
 		ClientPort:  p["ETCDCONTROLLER_CLIENT_PORT"],
 		PeerPort:    p["ETCDCONTROLLER_PEER_PORT"],
 		CommandPort: p["ETCDCONTROLLER_COMMAND_PORT"],
+		Logger:      log.WithFields(log.Fields{"component": "driver"}),
+		ECTLLogger:  log.WithFields(log.Fields{"component": "ectl"}),
+		ETCDLogger:  log.WithFields(log.Fields{"component": "etcd"}),
 	}
 	if peerTLS {
 		dc.PeerTLSCA = v["ETCDCONTROLLER_PEER_CA"]
@@ -155,6 +163,7 @@ func main() {
 	nc := conductor.Config{
 		NodeListFilename: v["ETCDCONTROLLER_NODELISTFILENAME"],
 		CommandPort:      p["ETCDCONTROLLER_COMMAND_PORT"],
+		Logger:           log.WithFields(log.Fields{"component": "conductor"}),
 	}
 	if peerTLS {
 		nc.PeerTLSCA = v["ETCDCONTROLLER_PEER_CA"]
@@ -178,7 +187,7 @@ func main() {
 		for {
 			err := gserver.Serve(l)
 			if err != nil {
-				fmt.Printf("grpc serve fail: %s\n", err)
+				mainlog.Errorf("grpc serve fail (restarting): %s", err)
 			}
 		}
 	}()
@@ -189,6 +198,8 @@ func main() {
 			IP:               v["ETCDCONTROLLER_IP"],
 			SerfPort:         p["ETCDCONTROLLER_SERF_PORT"],
 			NodeListFilename: v["ETCDCONTROLLER_NODELISTFILENAME"],
+			Logger:           log.WithField("component", "grouper"),
+			SerfLogger:       log.WithField("component", "serf"),
 		},
 	)
 	if err != nil {
@@ -200,16 +211,19 @@ func main() {
 	for {
 		select {
 		case <-t.C:
-			fmt.Printf("main TICK!\n")
-			if isCon, notCon := m.IsConductor(); isCon {
-				fmt.Printf("IS CONDUCTOR\n")
+			mainlog.Debugf("TICK!")
+			if isCon, err := m.IsConductor(); isCon {
+				mainlog.Debug("CONDUCTOR: true")
 				if !c.IsRunning() {
 					go c.Run()
 				}
 			} else {
-				fmt.Printf("NOT CONDUCTOR: %s\n", notCon)
+				mainlog.Debugf("CONDUCTOR: false")
+				if err != nil {
+					mainlog.Infof("Conductor evaluation failed: %s", err)
+				}
 				if c != nil {
-					fmt.Printf("TODO: Should stop conductor\n")
+					mainlog.Printf("TODO: Should stop the conductor")
 				}
 			}
 		}

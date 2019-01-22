@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 
+	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -12,6 +13,7 @@ import (
 type Config struct {
 	NodeListFilename string
 	CommandPort      int
+	Logger           *log.Entry
 	PeerTLSCA        string
 	PeerTLSCert      string
 	PeerTLSKey       string

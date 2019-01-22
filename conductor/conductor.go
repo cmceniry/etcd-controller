@@ -8,10 +8,12 @@ import (
 	"io/ioutil"
 	"net"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/cmceniry/etcd-controller/driver"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"go.etcd.io/etcd/pkg/transport"
@@ -31,6 +33,7 @@ type Conductor struct {
 	CurrentNodes     map[string]*NodeInfo
 	lastNodeListRead time.Time
 	running          bool
+	logger           *log.Entry
 
 	Listener   net.Listener
 	GRPCServer *grpc.Server
@@ -95,12 +98,18 @@ func NewConductor(c Config) *Conductor {
 		Config:       &c,
 		NodeList:     make(map[string]*NodeInfo),
 		CurrentNodes: make(map[string]*NodeInfo),
+		logger:       c.Logger,
 	}
 	if c.PeerTLSCA != "" && c.PeerTLSCert != "" && c.PeerTLSKey != "" {
 		con.peerTLS = true
 	}
 	if c.ClientTLSCA != "" && c.ClientTLSCert != "" && c.ClientTLSKey != "" {
 		con.clientTLS = true
+	}
+	if con.logger == nil {
+		l := log.New()
+		l.SetOutput(ioutil.Discard)
+		con.logger = l.WithFields(log.Fields{"component": "none"})
 	}
 	return con
 }
@@ -166,7 +175,7 @@ func (c *Conductor) etcdctlStatus(ni *NodeInfo) error {
 	resp, err := client.Status(ctx, ni.ClientURL())
 	cancel()
 	if err == nil {
-		fmt.Printf("%#v\n", resp)
+		c.logger.Debugf("resp: %#v", resp)
 	}
 	switch err {
 	case nil, rpctypes.ErrPermissionDenied:
@@ -302,7 +311,7 @@ func (c *Conductor) addNodeToCluster(newNodeName string) error {
 	if err != nil {
 		return fmt.Errorf("member add failed: %s", err)
 	}
-	fmt.Printf("AdderID: %x, New Member ID: %x\n", adderID, newID)
+	c.logger.Infof("AdderID: %x, New Member ID: %x", adderID, newID)
 	peerList := c.generatePeerList()
 	if len(peerList) == 0 {
 		return fmt.Errorf("peer list is empty")
@@ -325,7 +334,7 @@ func (c *Conductor) addNodeToCluster(newNodeName string) error {
 		}
 		ctlMembers, err := c.etcdctlMemberList(ctlNode)
 		if err != nil {
-			fmt.Printf("%s memberlist failed: %s", ctlNode.PeerString(), err)
+			c.logger.Errorf("%s memberlist failed: %s", ctlNode.PeerString(), err)
 			continue
 		}
 		newMembers, err := c.etcdctlMemberList(newNode)
@@ -333,7 +342,7 @@ func (c *Conductor) addNodeToCluster(newNodeName string) error {
 			return fmt.Errorf("%s memberlist failed: %s", newNode.PeerString(), err)
 		}
 		if reflect.DeepEqual(ctlMembers, newMembers) {
-			fmt.Printf("members: %#v\n", newMembers)
+			c.logger.Debugf("members: %#v", newMembers)
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -401,11 +410,11 @@ func (c *Conductor) IsRunning() bool {
 // Run starts the main Conductor work loop
 func (c *Conductor) Run() {
 	c.running = true
-	for t := range time.NewTicker(5 * time.Second).C {
-		fmt.Printf("%s TICK!\n", t)
+	for range time.NewTicker(5 * time.Second).C {
+		c.logger.Debug("TICK!")
 		changed, err := c.checkNodeList()
 		if err != nil {
-			fmt.Printf(`Error getting node list "%s": %s`+"\n", c.Config.NodeListFilename, err)
+			c.logger.Errorf(`Error getting node list "%s": %s`, c.Config.NodeListFilename, err)
 			continue
 		}
 		if changed {
@@ -419,57 +428,57 @@ func (c *Conductor) Run() {
 					dnl += fmt.Sprintf("    - %#v\n", ni)
 				}
 			} else {
-				dnl = "New node list: empty\n"
+				dnl = "New node list: empty"
 			}
-			fmt.Printf(dnl)
+			c.logger.Info(strings.TrimSpace(dnl))
 		}
 		// TODO: Check all current nodes health
 		err = c.getClusterNodeStatus()
 		if err != nil {
-			fmt.Printf(`Error getting cluster node status: %s`+"\n", err)
+			c.logger.Errorf(`Error getting cluster node status: %s`, err)
 		}
 		// Show status
-		fmt.Printf(c.printNodesStatus())
+		c.logger.Debug(c.printNodesStatus())
 		// Check if any current nodes have stopped and should attempt a restart
 		for nodeName, nodeInfo := range c.CurrentNodes {
 			if nodeInfo.IsStopped() {
-				fmt.Printf("Starting stopped node: %s\n", nodeName)
+				c.logger.Infof("Starting stopped node: %s", nodeName)
 				err := c.startNode(nodeName)
 				if err != nil {
-					fmt.Printf("Error trying to ensure node is running: %s: %s\n", nodeName, err)
+					c.logger.Errorf("Error trying to ensure node is running: %s: %s", nodeName, err)
 				}
 			}
 		}
 		// TODO: Check if there are extra nodes and remove them first
 		err = c.removeExtraNodesFromCluster()
 		if err != nil {
-			fmt.Printf("removeExtraNodesFromCluster: %s", err)
+			c.logger.Errorf("Error removing nodes from cluster: %s", err)
 			continue
 		}
 		// TODO: Check if etcd cluster has nodes not in current node list
 		// If empty cluster, init it
 		if c.checkNeedNewCluster() {
 			initNodeName := c.pickRandomNode()
-			fmt.Printf("Initializing Cluser with node %s\n", initNodeName)
+			c.logger.Infof("Initializing Cluser with node %s", initNodeName)
 			err := c.initNewCluster(initNodeName)
 			if err != nil {
-				fmt.Printf("Init Node Failure: %s: %s\n", initNodeName, err)
+				c.logger.Errorf("Init Node Failure: %s: %s", initNodeName, err)
 			} else {
-				fmt.Printf("Initialization successful\n")
+				c.logger.Infof("Initialization successful")
 			}
 			continue
 		}
 		// If there are uninitialized/failed nodes from the node list, add one of them at random
 		if newNodeName := c.pickRandomMissingNode(); newNodeName != "" {
-			fmt.Printf("Adding missing node to cluster: %s\n", newNodeName)
+			c.logger.Infof("Adding missing node to cluster: %s", newNodeName)
 			err := c.addNodeToCluster(newNodeName)
 			if err != nil {
-				fmt.Printf("Add Node Failure: %s: %s\n", newNodeName, err)
+				c.logger.Errorf("Add Node Failure: %s: %s", newNodeName, err)
+				continue
 			}
-			fmt.Printf("Addition successful\n")
+			c.logger.Infof("Addition successful")
 			continue
 		}
-		fmt.Printf("Nothing to do\n")
-		time.Sleep(1 * time.Second)
+		c.logger.Debug("Nothing to do")
 	}
 }

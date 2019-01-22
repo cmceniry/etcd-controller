@@ -12,6 +12,7 @@ import (
 	"github.com/cmceniry/etcd-controller/conductor"
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/serf/serf"
+	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -80,6 +81,8 @@ type Manager struct {
 	SerfConfig       *serf.Config
 	s                *serf.Serf
 	lastNodeListRead time.Time
+	logger           *log.Entry
+	serfLogger       *log.Entry
 }
 
 // Config holds the parameters for the Manager
@@ -88,6 +91,8 @@ type Config struct {
 	IP               string
 	SerfPort         int
 	NodeListFilename string
+	Logger           *log.Entry
+	SerfLogger       *log.Entry
 }
 
 // NewManager returns a Grouper Manager
@@ -96,6 +101,19 @@ func NewManager(c Config) (*Manager, error) {
 
 	m.Config = c
 	m.Nodes = map[string]*nodeinfo{}
+
+	m.logger = c.Logger
+	if m.logger == nil {
+		l := log.New()
+		l.SetOutput(ioutil.Discard)
+		m.logger = l.WithFields(log.Fields{"component": "none"})
+	}
+	m.serfLogger = c.SerfLogger
+	if m.serfLogger == nil {
+		l := log.New()
+		l.SetOutput(ioutil.Discard)
+		m.serfLogger = l.WithFields(log.Fields{"component": "none"})
+	}
 
 	m.MemberListConfig = memberlist.DefaultLANConfig()
 	m.MemberListConfig.BindAddr = "0.0.0.0"
@@ -109,7 +127,7 @@ func NewManager(c Config) (*Manager, error) {
 	m.SerfConfig.NodeName = c.Name
 	m.SerfConfig.EventCh = m.SerfEvents
 	m.SerfConfig.MemberlistConfig = m.MemberListConfig
-	m.SerfConfig.LogOutput = os.Stdout
+	m.SerfConfig.LogOutput = m.serfLogger.Writer()
 
 	s, err := serf.Create(m.SerfConfig)
 	if err != nil {
@@ -210,30 +228,30 @@ func (m *Manager) main() {
 	for {
 		select {
 		case <-ticker.C:
-			fmt.Printf("Grouper TICK!\n")
+			m.logger.Debugf("TICK!")
 			changed, err := m.checkNodeList()
-			// fmt.Printf("nodelist: %#v\n", m.Nodes)
-			// fmt.Printf("serfnode: %#v\n", m.s.Members())
+			m.logger.Debugf("memberlist: %#v", m.Nodes)
+			m.logger.Debugf("serfnode: %#v", m.s.Members())
 			if err != nil {
-				fmt.Printf("error checking node list: %s\n", err)
+				m.logger.Infof("error checking node list: %s", err)
 				continue
 			}
 			if !changed {
 				continue
 			}
 			if err := m.checkSerfPeers(); err != nil {
-				fmt.Printf("error checking peers: %s\n", err)
+				m.logger.Errorf("error checking peers: %s", err)
 			}
 		case e := <-m.SerfEvents:
-			fmt.Printf("%#v\n", e)
+			m.logger.Debugf("Event: %#v", e)
 			if me, ok := e.(serf.MemberEvent); ok {
 				for _, member := range me.Members {
-					fmt.Printf("MemberEvent: %#v\n", member)
+					m.logger.Debugf("MemberEvent: %#v", member)
 					switch me.EventType() {
 					case serf.EventMemberJoin:
-						fmt.Printf("Join: %#v\n", me)
+						m.logger.Infof("Join: %s", me.String())
 					case serf.EventMemberLeave, serf.EventMemberFailed, serf.EventMemberReap:
-						fmt.Printf("Out: %#v\n", me)
+						m.logger.Infof("Out: %s", me.String())
 					}
 				}
 			}

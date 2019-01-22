@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 )
@@ -37,6 +38,8 @@ type ETCDConfig struct {
 	PeerCAFile               string
 	PeerCertFile             string
 	PeerKeyFile              string
+	Logger                   *log.Entry
+	ETCDLogger               *log.Entry
 }
 
 func (c ETCDConfig) buildEnvironment() []string {
@@ -66,9 +69,30 @@ func (c ETCDConfig) buildEnvironment() []string {
 // to this struct
 //
 type ETCDProcess struct {
-	Config  ETCDConfig
-	command *exec.Cmd
-	mux     sync.Mutex
+	Config     ETCDConfig
+	command    *exec.Cmd
+	mux        sync.Mutex
+	logger     *log.Entry
+	etcdLogger *log.Entry
+}
+
+func New(c ETCDConfig) (*ETCDProcess, error) {
+	e := ETCDProcess{
+		Config:     c,
+		logger:     c.Logger,
+		etcdLogger: c.ETCDLogger,
+	}
+	if e.logger == nil {
+		l := log.New()
+		l.SetOutput(ioutil.Discard)
+		e.logger = l.WithFields(log.Fields{"component": "none"})
+	}
+	if e.etcdLogger == nil {
+		l := log.New()
+		l.SetOutput(ioutil.Discard)
+		e.etcdLogger = l.WithFields(log.Fields{"component": "none"})
+	}
+	return &e, nil
 }
 
 func (e *ETCDProcess) wait() {
@@ -87,8 +111,8 @@ func (e *ETCDProcess) start(env []string) error {
 	cmd := exec.Command(e.Config.Binary)
 	cmd.Env = env
 	cmd.Stdin = nil
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = e.etcdLogger.Writer()
+	cmd.Stderr = e.etcdLogger.Writer()
 	err := cmd.Start()
 	if err != nil {
 		return err
@@ -166,11 +190,11 @@ func (e *ETCDProcess) IsRunning() bool {
 	if e.command == nil {
 		return false
 	}
-	fmt.Printf("e.command.ProcessState: %#v\n", e.command.ProcessState)
+	e.logger.Debugf("e.command.ProcessState: %#v", e.command.ProcessState)
 	if e.command.ProcessState == nil {
 		return true
 	}
-	fmt.Printf("e.command.ProcessState.Exited(): %#v\n", e.command.ProcessState.Exited())
+	e.logger.Debugf("e.command.ProcessState.Exited(): %#v", e.command.ProcessState.Exited())
 	return !e.command.ProcessState.Exited()
 }
 
@@ -218,11 +242,8 @@ func (e *ETCDProcess) GetHealth() (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	resp, err := client.Status(ctx, url)
 	cancel()
-	fmt.Printf("StatusResponse: %#v\n", resp)
-	fmt.Printf("StatusError: %s\n", err)
-	if err == nil {
-		fmt.Printf("%#v\n", resp)
-	}
+	e.logger.Debugf("StatusResponse: %#v", resp)
+	e.logger.Debugf("StatusError: %s", err)
 	switch err {
 	case nil, rpctypes.ErrPermissionDenied:
 		return true, nil

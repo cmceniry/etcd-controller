@@ -3,10 +3,12 @@ package driver
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
 
 	pb "github.com/cmceniry/etcd-controller/driver/driverpb"
 	"github.com/cmceniry/etcd-controller/ectl"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -18,6 +20,7 @@ type SimpleDriver struct {
 	peerTLS    bool
 	clientTLS  bool
 	failed     bool
+	logger     *log.Entry
 }
 
 type SimpleDriverConfig struct {
@@ -36,6 +39,10 @@ type SimpleDriverConfig struct {
 	ClientTLSCA   string
 	ClientTLSCert string
 	ClientTLSKey  string
+
+	Logger     *log.Entry
+	ECTLLogger *log.Entry
+	ETCDLogger *log.Entry
 }
 
 func NewSimpleDriver(c SimpleDriverConfig) (*SimpleDriver, error) {
@@ -63,6 +70,13 @@ func NewSimpleDriver(c SimpleDriverConfig) (*SimpleDriver, error) {
 
 	s := &SimpleDriver{Config: c}
 
+	s.logger = s.Config.Logger
+	if s.logger == nil {
+		l := log.New()
+		l.SetOutput(ioutil.Discard)
+		s.logger = l.WithFields(log.Fields{"component": "none"})
+	}
+
 	if c.PeerTLSCA != "" && c.PeerTLSCert != "" && c.PeerTLSKey != "" {
 		s.peerTLS = true
 	}
@@ -87,6 +101,8 @@ func NewSimpleDriver(c SimpleDriverConfig) (*SimpleDriver, error) {
 		ListenClientURLs:         fmt.Sprintf("%s://0.0.0.0:%d", clientProto, s.Config.ClientPort),
 		InitialAdvertisePeerURLs: fmt.Sprintf("%s://%s:%d", peerProto, s.Config.IP, s.Config.PeerPort),
 		ListenPeerURLs:           fmt.Sprintf("%s://0.0.0.0:%d", peerProto, s.Config.PeerPort),
+		Logger:                   s.Config.ECTLLogger,
+		ETCDLogger:               s.Config.ETCDLogger,
 	}
 	if s.peerTLS {
 		pc.PeerClientCertAuth = true
@@ -100,9 +116,11 @@ func NewSimpleDriver(c SimpleDriverConfig) (*SimpleDriver, error) {
 		pc.CertFile = c.ClientTLSCert
 		pc.KeyFile = c.ClientTLSKey
 	}
-	s.Process = &ectl.ETCDProcess{
-		Config: pc,
+	ep, err := ectl.New(pc)
+	if err != nil {
+		return nil, err
 	}
+	s.Process = ep
 	return s, nil
 }
 
@@ -124,7 +142,7 @@ func (s *SimpleDriver) GetStatus(ctx context.Context, req *pb.StatusRequest) (*p
 	}
 	h, err := s.Process.GetHealth()
 	if err != nil || !h {
-		fmt.Printf("Health failed: %t - err: %s\n", h, err)
+		s.logger.Infof("Health failed: %t - err: %s", h, err)
 		r.State = StateUnknown
 		return r, nil
 	}
