@@ -174,6 +174,12 @@ func (m *Manager) isLowestNet() bool {
 	return true
 }
 
+// IsSelfOnList checks to see if this node is included in the current nodelist
+func (m *Manager) IsSelfOnList() bool {
+	_, ok := m.Nodes[m.Config.Name]
+	return ok
+}
+
 // IsConductor indicates that this node should be running the conductor
 // component
 func (m *Manager) IsConductor() (bool, error) {

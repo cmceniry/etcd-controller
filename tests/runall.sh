@@ -3,7 +3,7 @@
 cd $(dirname $0)
 
 failed=0
-for d in `find . -type d -maxdepth 1 -not -path . | sed -e 's/^.\///'`; do
+for d in `find . -type d -maxdepth 1 -not -path . -not -path ./scenarios | sed -e 's/^.\///'`; do
     printf "TEST:%-35s " $d
     ./$d/run.sh > results-${d}.out 2>&1
     if [ $? -eq 0 ]; then

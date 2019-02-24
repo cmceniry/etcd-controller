@@ -42,6 +42,8 @@ General assumptions in here:
 
 ## Removing a single etcd node (no orchestrator change)
 
+**Test `003-removing-single-etcd-node`**
+
 * Given:
   I have an established 3 node etcd cluster + etcd-controller group.
   I have a nodelist that includes the 3 nodes A,B,C.
@@ -49,6 +51,7 @@ General assumptions in here:
   I update the nodelist to include just A,B.
 * Then:
   I should have a two node etcd cluster (A,B) with a 3 node etcd-controller group (A,B,C).
+  Node C is in "watching" state.
 
 ## Adding a new node (orchestrator change)
 

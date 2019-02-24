@@ -6,6 +6,7 @@ import (
 
 	"github.com/cmceniry/etcd-controller/conductor"
 	pb "github.com/cmceniry/etcd-controller/conductor/conductorpb"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -13,6 +14,7 @@ func main() {
 	c := conductor.NewConductor(conductor.Config{
 		NodeListFilename: "/config/node-list.yaml",
 		CommandPort:      4270,
+		Logger:           log.WithFields(log.Fields{"component": "conductor"}),
 	})
 
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", 4270))

@@ -309,7 +309,7 @@ func (c *Conductor) addNodeToCluster(newNodeName string) error {
 	}
 	adderID, newID, err := c.etcdctlMemberAdd(ctlNode, newNode)
 	if err != nil {
-		return fmt.Errorf("member add failed: %s", err)
+		return fmt.Errorf("member add(%s,%s) failed: %s", ctlNode.Name, newNode.Name, err)
 	}
 	c.logger.Infof("AdderID: %x, New Member ID: %x", adderID, newID)
 	peerList := c.generatePeerList()
@@ -386,7 +386,7 @@ func (c *Conductor) pickRandomUpNode() string {
 
 func (c *Conductor) pickRandomMissingNode() string {
 	for nn, ni := range c.CurrentNodes {
-		if !ni.IsRunning() && !ni.IsStopped() {
+		if !ni.IsRunning() && !ni.IsStopped() && !ni.IsWatching() {
 			return nn
 		}
 	}

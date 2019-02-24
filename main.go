@@ -205,6 +205,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	s.AddLister(m)
 	m.Run()
 
 	t := time.NewTicker(1 * time.Second)

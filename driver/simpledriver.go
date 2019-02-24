@@ -8,6 +8,7 @@ import (
 
 	pb "github.com/cmceniry/etcd-controller/driver/driverpb"
 	"github.com/cmceniry/etcd-controller/ectl"
+	"github.com/cmceniry/etcd-controller/nodelist"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
@@ -21,6 +22,7 @@ type SimpleDriver struct {
 	clientTLS  bool
 	failed     bool
 	logger     *log.Entry
+	lister     nodelist.Lister
 }
 
 type SimpleDriverConfig struct {
@@ -124,19 +126,41 @@ func NewSimpleDriver(c SimpleDriverConfig) (*SimpleDriver, error) {
 	return s, nil
 }
 
+// AddGroup registers a Grouper with this driver so that it can get NodeList
+// information
+func (s *SimpleDriver) AddLister(l nodelist.Lister) {
+	s.lister = l
+}
+
 // RegisterWithGRPCServer handles the connection of this service with the
 // CommandPort
 func (s *SimpleDriver) RegisterWithGRPCServer(g *grpc.Server) {
 	pb.RegisterDriverServer(g, s)
 }
 
+// GetStatus returns the condition that this node is in. It can be one of:
+//
+// |---------|--------|-------|------|
+// * Unknown: odd state
+// * Running: in node list, etcd running
+// * Watching: Node is not in node list and shouldn't be running anything but
+//   was at one point so is part of the Group
+// * TODO: StaleWatching: Node is supposed to be a watcher but etcd is running
 func (s *SimpleDriver) GetStatus(ctx context.Context, req *pb.StatusRequest) (*pb.StatusResponse, error) {
 	r := &pb.StatusResponse{}
 	if s.Process == nil || !s.Process.IsInitialized() {
+		if s.lister != nil && !s.lister.IsSelfOnList() {
+			r.State = 4
+			return r, nil
+		}
 		r.State = StateUnknown
 		return r, nil
 	}
 	if !s.Process.IsRunning() {
+		if s.lister != nil && !s.lister.IsSelfOnList() {
+			r.State = 4
+			return r, nil
+		}
 		r.State = StateStopped
 		return r, nil
 	}

@@ -36,8 +36,9 @@ func (c *Conductor) findMissingExtraNodes() []string {
 		}
 		if ni.IsRunning() {
 			eRun = append(eRun, nn)
+		} else {
+			eNoRun = append(eNoRun, nn)
 		}
-		eNoRun = append(eNoRun, nn)
 	}
 	sort.Strings(eNoRun)
 	sort.Strings(eRun)
@@ -45,6 +46,8 @@ func (c *Conductor) findMissingExtraNodes() []string {
 	return append(eNoRun, eRun...)
 }
 
+// removeNodeFromCluster attempts to update two pieces: the etcd cluster, and
+// the etcd-controller group.
 func (c *Conductor) removeNodeFromCluster(rmNodeName string) error {
 	rmNode, ok := c.CurrentNodes[rmNodeName]
 	if !ok {
@@ -61,7 +64,11 @@ func (c *Conductor) removeNodeFromCluster(rmNodeName string) error {
 	if err != nil {
 		return err
 	}
-	delete(c.CurrentNodes, rmNodeName)
+
+	if rmNode.Status == 0 || rmNode.Status == 2 || rmNode.Status == 3 {
+		delete(c.CurrentNodes, rmNodeName)
+	}
+
 	return nil
 }
 

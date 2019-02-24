@@ -14,3 +14,10 @@ func (n NodeInfo) IsRunning() bool {
 func (n NodeInfo) IsStopped() bool {
 	return n.Status == int32(pb.NodeInfoStatus_STOPPED)
 }
+
+// IsWatching indicates that this node is not in the node list, and etcd
+// should not be running. Likely that this node is transitioning in or
+// out.
+func (n NodeInfo) IsWatching() bool {
+	return n.Status == int32(pb.NodeInfoStatus_WATCHING)
+}

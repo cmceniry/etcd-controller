@@ -9,10 +9,11 @@ service conductor {
 }
 
 enum NodeInfoStatus {
-    UNKNOWN = 0;
-    RUNNING = 1;
-    STOPPED = 2;
-    FAILED  = 3;
+    UNKNOWN  = 0;
+    RUNNING  = 1;
+    STOPPED  = 2;
+    FAILED   = 3;
+    WATCHING = 4;
 }
 
 message GetInfoRequest {}
